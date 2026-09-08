@@ -10,7 +10,8 @@ const TICK_MS = 50;
 
 const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000 };
 const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000, spawnEveryMs: 5000,  cap: 20 };
-const BOSS    = { r: 32, hp: 300, speed: 80, dmg: 25, cooldownMs: 1000, spawnEveryMs: 40000, cap: 2 };
+// Boss：持枪远程（无碰撞伤害），视野 = 所持武器射程，移速缓慢
+const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2 };
 const ROOM    = { maxPlayers: 4, codeLen: 4 };
 
 // 武器表：加武器 = 加一行；射击逻辑只读这张表。range = 子弹最大飞行距离（px）
@@ -69,13 +70,20 @@ function moveWithWalls(x, y, dx, dy, r, walls) {
   return { x: nx, y: ny };
 }
 
-const DIRS = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+// 方向键合成射击方向：右−左、下−上；两键同按出斜向，对键抵消；全零 → null
+function fireDir(keys) {
+  const dx = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+  const dy = (keys.down ? 1 : 0) - (keys.up ? 1 : 0);
+  if (!dx && !dy) return null;
+  const l = Math.hypot(dx, dy);
+  return { x: dx / l, y: dy / l };
+}
 
-// 冷却未到 / 参数非法 → null；否则返回子弹数组（扇形以 dir 为中心对称展开）
+// dir = 单位向量 {x,y}。冷却未到 / 参数非法 → null；否则返回子弹数组（扇形以 dir 为中心对称展开）
 function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner) {
   const w = WEAPONS[weaponKey];
-  if (!w || !DIRS[dir] || now - lastFireAt < w.rate) return null;
-  const base = Math.atan2(DIRS[dir].y, DIRS[dir].x);
+  if (!w || !dir || (!dir.x && !dir.y) || now - lastFireAt < w.rate) return null;
+  const base = Math.atan2(dir.y, dir.x);
   const spread = w.spread * Math.PI / 180;
   const bullets = [];
   for (let i = 0; i < w.count; i++) {
@@ -134,6 +142,6 @@ function pickBossSpawn(spawns, bosses, players) {
 }
 
 return { MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, WALLS, PLAYER_SPAWNS, BOSS_SPAWNS,
-  dist, circleRectHit, moveWithWalls, DIRS, weaponFire, bulletStep,
+  dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
   chaseStep, regenStep, pickFarthestSpawn, pickBossSpawn };
 });

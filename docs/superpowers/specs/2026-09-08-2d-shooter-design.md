@@ -60,23 +60,24 @@ game/
 
 - 玩家 HP 100，移速 200 px/s；服务器存按键状态，每 tick 积分位移
 - **HP 缓慢恢复**：每秒 +2，回满 100 封顶。**受伤打断恢复**：服务器为每个玩家记 `lastDamagedAt`，距最近一次受伤满 **3 秒**后才重新开始恢复。恢复速率与延迟时长在 `shared.js` 可调
-- 方向键开火，射速由武器表决定（默认手枪 300ms/发，按住连发同速率）
+- 方向键开火，两键同按合成斜向射击（←+→ 等对键互相抵消不开火），射速由武器表决定（默认手枪 300ms/发，按住连发同速率）
 - 子弹属性完全由武器表驱动；碰墙、碰玩家、碰怪物或出图即消失（穿透弹除外）
 
 ### 4.3 武器表（数据驱动，加武器 = 加一行）
 
 ```js
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, pierce: false, size: 3 },
-  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, pierce: false, size: 3 },
-  shotgun: { rate: 600, dmg: 15, speed: 500, count: 3, spread: 15, pierce: false, size: 3 },
-  cannon:  { rate: 800, dmg: 60, speed: 300, count: 1, pierce: true,  size: 8 },
+  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, pierce: false, size: 3, range: 600 },
+  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, pierce: false, size: 3, range: 500 },
+  shotgun: { rate: 600, dmg: 15, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400 },
+  cannon:  { rate: 800, dmg: 60, speed: 300, count: 1, pierce: true,  size: 8, range: 1100 },
 }
 ```
 
 - 射击逻辑只写一次：读表生成子弹（count>1 时以射击方向为中心 ±spread 度扇形展开）
 - pierce=true 的子弹穿过怪物和玩家不消失，撞墙才消失
-- 掉落时从表中随机选一个非 pistol 武器
+- range = 子弹最大飞行距离（px），飞满即消失；霰弹枪贴脸爆发、加农炮远程狙击
+- Boss 刷新时从表中随机选一个非 pistol 武器持有
 
 ### 4.4 普通怪物
 
@@ -88,9 +89,11 @@ const WEAPONS = {
 
 - **固定刷新点**：地图预设 2–3 个 Boss 刷新点（`shared.js` 的 `BOSS_SPAWNS`），刷新点所在区域墙体布局保持空旷（ Boss 场地 = 天然的 PvP 争夺竞技场）
 - 每 40 秒刷一只：从当前没有 Boss 的刷新点中选离玩家最远的一个；若刷新点全被占则本轮跳过，场上同时最多 **2 只**
-- 大紫色圆（半径 32），HP 300，移速 80，碰撞伤害 25，攻击冷却 1 秒
-- 行为同普通怪（追最近玩家），不做远程攻击
-- 死亡时在原地掉落一个武器拾取物
+- 大紫色圆（半径 32），HP 300，移速缓慢 40
+- **持枪 Boss**：刷出时随机持有一把非 pistol 武器，头顶显示武器名
+- 攻击逻辑：**视野 = 所持武器的射程**（加农炮 Boss 视野 1100 远程狙击、霰弹枪 Boss 视野 400 逼玩家近战）。视野外缓慢追最近玩家；玩家进入视野后边逼近边按武器射速朝玩家精确角度开火（扇形/穿透全按武器表）。子弹可被墙挡、可躲
+- **无碰撞伤害**（与普通怪定位区分：怪=近战杂兵，Boss=持枪精英）；Boss 子弹只打玩家，不打怪/其他 Boss，客户端画成红色便于躲避
+- 死亡时在原地掉落**它手里那把武器**（想要加农炮就猎加农炮 Boss）
 
 ### 4.6 武器拾取物
 

@@ -53,29 +53,53 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
 
 // —— Task 3: 射击与子弹 ——
 {
-  const bs = G.weaponFire('pistol', 0, 0, 'right', 1000, 0, 'p1');
+  // fireDir：单键 / 双键斜向 / 对键抵消 / 全空
+  assert.deepEqual(G.fireDir({ right: true }), { x: 1, y: 0 });
+  {
+    const d = G.fireDir({ right: true, up: true });
+    assert.ok(Math.abs(d.x - Math.SQRT1_2) < 1e-9);
+    assert.ok(Math.abs(d.y + Math.SQRT1_2) < 1e-9);
+  }
+  assert.equal(G.fireDir({ left: true, right: true }), null);
+  assert.equal(G.fireDir({}), null);
+}
+{
+  const bs = G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 1000, 0, 'p1');
   assert.equal(bs.length, 1);
   assert.deepEqual({ dmg: bs[0].dmg, vx: bs[0].vx, vy: bs[0].vy, owner: bs[0].owner, pierce: bs[0].pierce, range: bs[0].range },
     { dmg: 25, vx: 500, vy: 0, owner: 'p1', pierce: false, range: 600 });
   // 冷却未到（200ms < 300ms）→ null
-  assert.equal(G.weaponFire('pistol', 0, 0, 'right', 1200, 1000, 'p1'), null);
-  // 未知武器 / 非法方向 → null
-  assert.equal(G.weaponFire('nope', 0, 0, 'right', 9e9, 0, 'p1'), null);
-  assert.equal(G.weaponFire('pistol', 0, 0, 'nope', 9e9, 0, 'p1'), null);
+  assert.equal(G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 1200, 1000, 'p1'), null);
+  // 未知武器 / 非法方向（null、零向量）→ null
+  assert.equal(G.weaponFire('nope', 0, 0, { x: 1, y: 0 }, 9e9, 0, 'p1'), null);
+  assert.equal(G.weaponFire('pistol', 0, 0, null, 9e9, 0, 'p1'), null);
+  assert.equal(G.weaponFire('pistol', 0, 0, { x: 0, y: 0 }, 9e9, 0, 'p1'), null);
+}
+{
+  // 斜向射击：45° 方向 vx=vy（速度 500/√2）
+  const d = { x: Math.SQRT1_2, y: Math.SQRT1_2 };
+  const bs = G.weaponFire('pistol', 0, 0, d, 9e9, 0, 'p1');
+  assert.ok(Math.abs(bs[0].vx - 500 * Math.SQRT1_2) < 1e-9);
+  assert.ok(Math.abs(bs[0].vy - 500 * Math.SQRT1_2) < 1e-9);
 }
 {
   // 霰弹 5 颗扇形：朝 right 时 vy 依次 <0 / <0 / =0 / >0 / >0
-  const sg = G.weaponFire('shotgun', 0, 0, 'right', 5000, 0, 'p1');
+  const sg = G.weaponFire('shotgun', 0, 0, { x: 1, y: 0 }, 5000, 0, 'p1');
   assert.equal(sg.length, 5);
   assert.ok(sg[0].vy < 0);
   assert.ok(sg[1].vy < 0);
   assert.ok(Math.abs(sg[2].vy) < 1e-9);
   assert.ok(sg[3].vy > 0);
   assert.ok(sg[4].vy > 0);
+  // 斜向中心展开：朝 45° 时全部子弹 vx>0 且 vy>0 分量存在
+  const d = { x: Math.SQRT1_2, y: Math.SQRT1_2 };
+  const sg2 = G.weaponFire('shotgun', 0, 0, d, 9e9, 0, 'p1');
+  assert.equal(sg2.length, 5);
+  assert.ok(sg2.every(b => b.vx > 0));
 }
 {
   // 重炮：慢速大弹、穿透
-  const cn = G.weaponFire('cannon', 0, 0, 'left', 9000, 0, 'p1');
+  const cn = G.weaponFire('cannon', 0, 0, { x: -1, y: 0 }, 9000, 0, 'p1');
   assert.equal(cn[0].pierce, true);
   assert.equal(cn[0].vx, -300);
   assert.equal(cn[0].size, 8);

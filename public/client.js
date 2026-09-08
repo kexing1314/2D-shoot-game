@@ -76,16 +76,21 @@ function render() {
   // 怪物（红三角）
   ctx.fillStyle = '#ff5252';
   for (const m of state.monsters) if (inView(m.x, m.y, G.MONSTER.r)) tri(m.x, m.y, G.MONSTER.r);
-  // Boss（大紫圆 + 血条）
+  // Boss（大紫圆 + 血条 + 手持武器名）
   for (const b of state.bosses) {
-    if (!inView(b.x, b.y, G.BOSS.r)) continue;
+    if (!inView(b.x, b.y, G.BOSS.r + 20)) continue;
     ctx.fillStyle = '#9b59b6';
     circ(b.x, b.y, G.BOSS.r);
     bar(b.x, b.y - G.BOSS.r - 10, 48, b.hp / G.BOSS.hp);
+    ctx.fillStyle = '#ffd700'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(WEAPON_NAMES[b.weapon] || b.weapon || '', b.x, b.y - G.BOSS.r - 18);
   }
-  // 子弹（黄点，尺寸来自服务器）
-  ctx.fillStyle = '#ffd93d';
-  for (const b of state.bullets) if (inView(b.x, b.y, b.size)) circ(b.x, b.y, b.size);
+  // 子弹（玩家黄点 / Boss 红点，尺寸来自服务器）
+  for (const b of state.bullets) {
+    if (!inView(b.x, b.y, b.size)) continue;
+    ctx.fillStyle = b.boss ? '#ff5252' : '#ffd93d';
+    circ(b.x, b.y, b.size);
+  }
   // 玩家（彩圆 + 昵称 + 血条；自己描白边；死亡中不画）
   for (const p of state.players) {
     if (p.respawnIn > 0 || !inView(p.x, p.y, G.PLAYER.r + 20)) continue;

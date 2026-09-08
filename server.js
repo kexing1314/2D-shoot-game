@@ -100,12 +100,11 @@ function tick(room) {
     }
     G.regenStep(p, now, dt);
 
-    // 射击：每 tick 只朝第一个按下的方向开火
-    for (const dir of ['up', 'down', 'left', 'right']) {
-      if (!p.keys[dir]) continue;
+    // 射击：方向键合成向量（两键同按斜射，对键抵消不开火）
+    const dir = G.fireDir(p.keys);
+    if (dir) {
       const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id);
       if (bs) { p.lastFire = now; room.bullets.push(...bs); }
-      break;
     }
   }
 
@@ -126,6 +125,7 @@ function tick(room) {
         return false;
       }
     }
+    if (b.boss) return true; // Boss 子弹只打玩家，不打怪/其他 Boss
     // 命中怪物 / Boss
     for (const [list, r, isBoss] of [[room.monsters, G.MONSTER.r, false], [room.bosses, G.BOSS.r, true]]) {
       for (let i = list.length - 1; i >= 0; i--) {
@@ -142,7 +142,8 @@ function tick(room) {
           list.splice(i, 1);
           const killer = room.players.get(b.owner);
           if (killer) killer.kills++;
-          if (isBoss) room.pickups.push({ id: ++eid, x: m.x, y: m.y, weapon: dropWeapon() });
+          // Boss 掉落它手里那把武器（争夺点）
+          if (isBoss) room.pickups.push({ id: ++eid, x: m.x, y: m.y, weapon: m.weapon });
         }
         if (!b.pierce) return false;
       }
@@ -161,16 +162,29 @@ function tick(room) {
     return true;
   });
 
-  // 4. 怪物 / Boss：追最近的活人，接触伤害 + 冷却
+  // 4a. 怪物：追最近的活人，接触伤害 + 冷却
   const alive = [...room.players.values()].filter(p => !p.deadUntil);
-  for (const [list, cfg] of [[room.monsters, G.MONSTER], [room.bosses, G.BOSS]]) {
-    for (const m of list) {
-      const target = nearest(alive, m.x, m.y);
-      G.chaseStep(m, cfg.r, target, cfg.speed, dt, G.WALLS);
-      if (target && now >= m.nextHit && G.dist(m.x, m.y, target.x, target.y) < cfg.r + G.PLAYER.r) {
-        damagePlayer(room, target, cfg.dmg, null, now);
-        m.nextHit = now + cfg.cooldownMs;
-      }
+  for (const m of room.monsters) {
+    const target = nearest(alive, m.x, m.y);
+    G.chaseStep(m, G.MONSTER.r, target, G.MONSTER.speed, dt, G.WALLS);
+    if (target && now >= m.nextHit && G.dist(m.x, m.y, target.x, target.y) < G.MONSTER.r + G.PLAYER.r) {
+      damagePlayer(room, target, G.MONSTER.dmg, null, now);
+      m.nextHit = now + G.MONSTER.cooldownMs;
+    }
+  }
+  // 4b. Boss：缓慢追击；玩家进入所持武器射程（= 视野）内则朝其精确角度开火
+  for (const bs of room.bosses) {
+    const target = nearest(alive, bs.x, bs.y);
+    G.chaseStep(bs, G.BOSS.r, target, G.BOSS.speed, dt, G.WALLS);
+    if (!target) continue;
+    const d = G.dist(bs.x, bs.y, target.x, target.y);
+    if (d <= 0 || d > G.WEAPONS[bs.weapon].range) continue;
+    const dir = { x: (target.x - bs.x) / d, y: (target.y - bs.y) / d };
+    const shots = G.weaponFire(bs.weapon, bs.x, bs.y, dir, now, bs.lastFire, null);
+    if (shots) {
+      bs.lastFire = now;
+      for (const s of shots) s.boss = true;
+      room.bullets.push(...shots);
     }
   }
 
@@ -184,7 +198,7 @@ function tick(room) {
       const s = G.pickBossSpawn(G.BOSS_SPAWNS, room.bosses, alive);
       if (s) {
         room.lastBoss = now;
-        room.bosses.push({ id: ++eid, x: s.x, y: s.y, hp: G.BOSS.hp, nextHit: 0 });
+        room.bosses.push({ id: ++eid, x: s.x, y: s.y, hp: G.BOSS.hp, weapon: dropWeapon(), lastFire: 0 });
       }
     }
   }
@@ -260,8 +274,8 @@ function broadcastState(room, now) {
       respawnIn: p.deadUntil ? Math.max(1, Math.ceil((p.deadUntil - now) / 1000)) : 0,
     })),
     monsters: room.monsters.map(m => ({ x: Math.round(m.x), y: Math.round(m.y) })),
-    bosses: room.bosses.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp) })),
-    bullets: room.bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), size: b.size })),
+    bosses: room.bosses.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp), weapon: b.weapon })),
+    bullets: room.bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss })),
     pickups: room.pickups.map(pk => ({ x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon })),
   });
   for (const p of room.players.values()) if (p.ws.readyState === 1) p.ws.send(msg);
