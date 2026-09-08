@@ -70,15 +70,15 @@ game/
 const WEAPONS = {
   pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, pierce: false, size: 3, range: 600 },
   mg:      { rate: 100, dmg: 15, speed: 500, count: 1, pierce: false, size: 3, range: 500 },
-  shotgun: { rate: 600, dmg: 15, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400 },
-  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, pierce: true,  size: 8, range: 640, explode: 80, explodeDmg: 40 },
+  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400 },
+  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, pierce: true,  size: 8, range: 640, explode: 160, explodeDmg: 40 },
 }
 ```
 
 - 射击逻辑只写一次：读表生成子弹（count>1 时以射击方向为中心 ±spread 度扇形展开）
 - pierce=true 的子弹穿过怪物和玩家不消失，撞墙才消失
 - range = 子弹最大飞行距离（px），飞满即消失；霰弹枪贴脸爆发
-- **加农炮爆炸弹**：射程 = 玩家横向视野一半（1280/2=640），飞到射程终点或撞墙爆炸，对半径 80px 内目标造成 40 点 AOE 伤害 + 沿爆心向外击退，不伤射手自己；飞行途中直接命中的目标吃 80 穿透伤。Boss 持加农炮时爆炸只伤玩家（与 Boss 子弹只打玩家一致）；客户端按广播的 boom 标记画橙色爆炸粒子
+- **加农炮爆炸弹**：射程 = 玩家横向视野一半（1280/2=640），飞到射程终点或撞墙爆炸，对半径 160px 内目标造成 40 点 AOE 伤害 + 沿爆心向外击退，不伤射手自己；飞行途中直接命中的目标吃 80 穿透伤。Boss 持加农炮时爆炸只伤玩家（与 Boss 子弹只打玩家一致）；客户端按广播的 boom 标记画橙色爆炸粒子
 - Boss 刷新时从表中随机选一个非 pistol 武器持有
 
 ### 4.4 普通怪物

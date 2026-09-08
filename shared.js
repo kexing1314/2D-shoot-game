@@ -22,8 +22,8 @@ const ROOM    = { maxPlayers: 4, codeLen: 4 };
 const WEAPONS = {
   pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, spread: 0,  pierce: false, size: 3, range: 600 },
   mg:      { rate: 100, dmg: 15, speed: 500, count: 1, spread: 0,  pierce: false, size: 3, range: 500 },
-  shotgun: { rate: 600, dmg: 15, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400 },
-  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, spread: 0,  pierce: true,  size: 8, range: 640, explode: 80, explodeDmg: 40 },
+  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400 },
+  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, spread: 0,  pierce: true,  size: 8, range: 640, explode: 160, explodeDmg: 40 },
 };
 
 const COLORS = ['#4a9eff', '#ff9f43', '#2ecc71', '#e84393'];

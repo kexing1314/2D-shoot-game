@@ -98,14 +98,14 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.ok(sg2.every(b => b.vx > 0));
 }
 {
-  // 重炮：慢速大弹、穿透、射程终点爆炸（直击 80 / 爆炸 40 / 半径 80 / 射程 640 = 横向视野一半）
+  // 重炮：慢速大弹、穿透、射程终点爆炸（直击 80 / 爆炸 40 / 半径 160 / 射程 640 = 横向视野一半）
   const cn = G.weaponFire('cannon', 0, 0, { x: -1, y: 0 }, 9000, 0, 'p1');
   assert.equal(cn[0].pierce, true);
   assert.equal(cn[0].vx, -300);
   assert.equal(cn[0].size, 8);
   assert.equal(cn[0].dmg, 80);
   assert.equal(cn[0].range, 640);
-  assert.equal(cn[0].explode, 80);
+  assert.equal(cn[0].explode, 160);
   assert.equal(cn[0].explodeDmg, 40);
   // 非爆炸武器 explode = 0
   const ps = G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1');
