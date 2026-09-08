@@ -29,4 +29,26 @@ for (const [name, wp] of Object.entries(G.WEAPONS)) {
   }
 }
 
+// —— Task 2: 几何与移动 ——
+assert.equal(G.dist(0, 0, 3, 4), 5);
+
+// 圆 (90,100) r16 vs 墙 x∈[100,120]：最近点 (100,100)，距 10 < 16 → 命中
+assert.equal(G.circleRectHit(90, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), true);
+// 距 50 > 16 → 未命中
+assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), false);
+
+// X 方向被墙挡住（100+60=160 撞进墙），Y 方向自由 → 贴墙滑动
+{
+  const wall = [{ x: 100, y: 0, w: 20, h: 200 }];
+  const p = G.moveWithWalls(50, 50, 60, 30, 16, wall);
+  assert.equal(p.x, 50);   // X 被挡，回到原位
+  assert.equal(p.y, 80);   // Y 照常
+}
+// 空旷处自由移动
+{
+  const p = G.moveWithWalls(500, 500, 10, -10, 16, G.WALLS);
+  assert.equal(p.x, 510);
+  assert.equal(p.y, 490);
+}
+
 console.log('all tests passed');

@@ -49,5 +49,26 @@ const BOSS_SPAWNS = [
   { x: 400, y: 1500 }, { x: 2800, y: 300 }, { x: 1600, y: 1500 },
 ];
 
-return { MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, WALLS, PLAYER_SPAWNS, BOSS_SPAWNS };
+function dist(ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function circleRectHit(cx, cy, r, rect) {
+  const nx = Math.max(rect.x, Math.min(cx, rect.x + rect.w));
+  const ny = Math.max(rect.y, Math.min(cy, rect.y + rect.h));
+  return dist(cx, cy, nx, ny) < r;
+}
+
+// 轴分离碰撞：先试 X 再试 Y，被挡的轴不动（贴墙滑动）
+function moveWithWalls(x, y, dx, dy, r, walls) {
+  let nx = x + dx;
+  if (walls.some(w => circleRectHit(nx, y, r, w))) nx = x;
+  let ny = y + dy;
+  if (walls.some(w => circleRectHit(nx, ny, r, w))) ny = y;
+  return { x: nx, y: ny };
+}
+
+return { MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, WALLS, PLAYER_SPAWNS, BOSS_SPAWNS,
+  dist, circleRectHit, moveWithWalls };
 });
