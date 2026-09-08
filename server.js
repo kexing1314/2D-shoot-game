@@ -93,8 +93,9 @@ function tick(room) {
     const dy = (p.keys.s ? 1 : 0) - (p.keys.w ? 1 : 0);
     if (dx || dy) {
       const l = Math.hypot(dx, dy); // 斜向不超速
+      const speed = G.PLAYER.speed * (now < (p.panicUntil || 0) ? G.PLAYER.panicMul : 1); // 低血加速
       const m = G.moveWithWalls(p.x, p.y,
-        dx / l * G.PLAYER.speed * dt, dy / l * G.PLAYER.speed * dt,
+        dx / l * speed * dt, dy / l * speed * dt,
         G.PLAYER.r, G.WALLS);
       p.x = m.x; p.y = m.y;
     }
@@ -238,7 +239,11 @@ function damagePlayer(room, p, dmg, attackerId, now, src) {
       G.PLAYER.r, G.WALLS);
     p.x = m.x; p.y = m.y;
   }
-  if (p.hp > 0) return;
+  if (p.hp > 0) {
+    // 低血肾上腺素：HP 低于 panicBelow 时每次受伤提速，再受伤刷新时长
+    if (p.hp < G.PLAYER.panicBelow) p.panicUntil = now + G.PLAYER.panicMs;
+    return;
+  }
   p.hp = 0;
   p.deaths++;
   p.deadUntil = now + G.PLAYER.respawnMs;
@@ -287,6 +292,7 @@ function broadcastState(room, now) {
       id: p.id, name: p.name, color: p.color,
       x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp),
       weapon: p.weapon, kills: p.kills, deaths: p.deaths, face: p.face,
+      boost: p.panicUntil > now, // 低血加速中（客户端画残影提示）
       respawnIn: p.deadUntil ? Math.max(1, Math.ceil((p.deadUntil - now) / 1000)) : 0,
     })),
     // 实体带 id：客户端按 id 匹配前后帧做插值与死亡/消失特效

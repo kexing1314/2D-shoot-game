@@ -219,6 +219,17 @@ function render() {
     ctx.globalAlpha = 0.18; ctx.fillStyle = p0.color;
     circ(p.x, p.y, G.PLAYER.r * 1.7);
     ctx.globalAlpha = 1;
+    // 低血加速：蓝色残影（上一帧+中间位置）+ 脉冲圆环
+    if (p0.boost) {
+      const o = maps.players && maps.players.get(p0.id);
+      ctx.globalAlpha = 0.2; ctx.fillStyle = '#4dd0e1';
+      if (o) circ(o.x, o.y, G.PLAYER.r * 0.9);
+      circ(o ? (o.x + p.x) / 2 : p.x, o ? (o.y + p.y) / 2 : p.y, G.PLAYER.r * 0.7);
+      ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t / 100);
+      ctx.strokeStyle = '#4dd0e1'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, G.PLAYER.r + 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     // 炮管（朝向来自服务器开火记录）+ 后坐 2px（100ms 回弹）
     if (p0.face) {
       const rec = (recoil.get(p0.id) || 0) > t ? 2 : 0;
