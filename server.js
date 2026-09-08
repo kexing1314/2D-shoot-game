@@ -179,6 +179,12 @@ function tick(room) {
     if (!target) continue;
     const d = G.dist(bs.x, bs.y, target.x, target.y);
     if (d <= 0 || d > G.WEAPONS[bs.weapon].range) continue;
+    // 攻击节奏：开火 burstMs / 停火 restMs 交替（只在锁定目标时推进；停火期只追不打）
+    if (now >= bs.phaseEnd) {
+      bs.firing = !bs.firing;
+      bs.phaseEnd = now + (bs.firing ? G.BOSS.burstMs : G.BOSS.restMs);
+    }
+    if (!bs.firing) continue;
     const dir = { x: (target.x - bs.x) / d, y: (target.y - bs.y) / d };
     const shots = G.weaponFire(bs.weapon, bs.x, bs.y, dir, now, bs.lastFire, null);
     if (shots) {
@@ -198,7 +204,7 @@ function tick(room) {
       const s = G.pickBossSpawn(G.BOSS_SPAWNS, room.bosses, alive);
       if (s) {
         room.lastBoss = now;
-        room.bosses.push({ id: ++eid, x: s.x, y: s.y, hp: G.BOSS.hp, weapon: dropWeapon(), lastFire: 0 });
+        room.bosses.push({ id: ++eid, x: s.x, y: s.y, hp: G.BOSS.hp, weapon: dropWeapon(), lastFire: 0, firing: false, phaseEnd: 0 });
       }
     }
   }

@@ -10,8 +10,8 @@ const TICK_MS = 50;
 
 const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000 };
 const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000, spawnEveryMs: 5000,  cap: 20 };
-// Boss：持枪远程（无碰撞伤害），视野 = 所持武器射程，移速缓慢
-const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2 };
+// Boss：持枪远程（无碰撞伤害），视野 = 所持武器射程，移速缓慢；攻击节奏 = 开火 burstMs / 停火 restMs 交替
+const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2, burstMs: 3000, restMs: 2000 };
 const ROOM    = { maxPlayers: 4, codeLen: 4 };
 
 // 武器表：加武器 = 加一行；射击逻辑只读这张表。range = 子弹最大飞行距离（px）
