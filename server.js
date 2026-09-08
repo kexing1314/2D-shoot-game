@@ -100,8 +100,8 @@ function tick(room) {
     }
     G.regenStep(p, now, dt);
 
-    // 射击：方向键合成向量（两键同按斜射，对键抵消不开火）
-    const dir = G.fireDir(p.keys);
+    // 射击：方向键合成向量（两键同按斜射，对键抵消不开火）；受伤硬直期内停火
+    const dir = now >= (p.fireStunUntil || 0) ? G.fireDir(p.keys) : null;
     if (dir) {
       const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id);
       if (bs) { p.lastFire = now; room.bullets.push(...bs); }
@@ -119,9 +119,9 @@ function tick(room) {
         b.hitIds = b.hitIds || [];
         if (b.hitIds.includes(p.id)) continue;
         b.hitIds.push(p.id);
-        damagePlayer(room, p, b.dmg, b.owner, now);
+        damagePlayer(room, p, b.dmg, b.owner, now, b);
       } else {
-        damagePlayer(room, p, b.dmg, b.owner, now);
+        damagePlayer(room, p, b.dmg, b.owner, now, b);
         return false;
       }
     }
@@ -168,7 +168,7 @@ function tick(room) {
     const target = nearest(alive, m.x, m.y);
     G.chaseStep(m, G.MONSTER.r, target, G.MONSTER.speed, dt, G.WALLS);
     if (target && now >= m.nextHit && G.dist(m.x, m.y, target.x, target.y) < G.MONSTER.r + G.PLAYER.r) {
-      damagePlayer(room, target, G.MONSTER.dmg, null, now);
+      damagePlayer(room, target, G.MONSTER.dmg, null, now, m);
       m.nextHit = now + G.MONSTER.cooldownMs;
     }
   }
@@ -224,10 +224,20 @@ function respawn(room, p, now) {
   p.lastFire = now;
 }
 
-function damagePlayer(room, p, dmg, attackerId, now) {
+// src = 伤害来源位置（子弹/怪物），用于击退方向；缺省不击退
+function damagePlayer(room, p, dmg, attackerId, now, src) {
   if (p.deadUntil) return; // 已死亡玩家不再受伤（防止同tick多怪重复计死亡）
   p.hp -= dmg;
   p.lastDamagedAt = now;
+  p.fireStunUntil = now + G.PLAYER.fireStunMs; // 受伤硬直：暂停射击（移动不受影响）
+  if (src) {
+    // 击退：沿 src→玩家 方向推 knockback px，撞墙检测（打不进墙）
+    const d = G.dist(src.x, src.y, p.x, p.y) || 1;
+    const m = G.moveWithWalls(p.x, p.y,
+      (p.x - src.x) / d * G.PLAYER.knockback, (p.y - src.y) / d * G.PLAYER.knockback,
+      G.PLAYER.r, G.WALLS);
+    p.x = m.x; p.y = m.y;
+  }
   if (p.hp > 0) return;
   p.hp = 0;
   p.deaths++;
