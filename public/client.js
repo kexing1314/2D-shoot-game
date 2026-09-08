@@ -23,7 +23,6 @@ function startGame(m) {
   roomCode = m.code;
   $('lobby').style.display = 'none';
   $('game').style.display = 'block';
-  requestAnimationFrame(render);
 }
 
 function backToLobby(msg) {
@@ -186,3 +185,6 @@ addEventListener('keyup', e => {
   if (!k) return;
   if (keys[k]) { keys[k] = false; sendInput(); }
 });
+
+// 渲染循环全局唯一：脚本加载即启动，state 为空时 render 自行早退
+requestAnimationFrame(render);
