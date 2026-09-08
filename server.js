@@ -104,7 +104,7 @@ function tick(room) {
     const dir = now >= (p.fireStunUntil || 0) ? G.fireDir(p.keys) : null;
     if (dir) {
       const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id);
-      if (bs) { p.lastFire = now; room.bullets.push(...bs); }
+      if (bs) { p.lastFire = now; for (const x of bs) x.id = ++eid; room.bullets.push(...bs); }
     }
   }
 
@@ -189,7 +189,7 @@ function tick(room) {
     const shots = G.weaponFire(bs.weapon, bs.x, bs.y, dir, now, bs.lastFire, null);
     if (shots) {
       bs.lastFire = now;
-      for (const s of shots) s.boss = true;
+      for (const s of shots) { s.boss = true; s.id = ++eid; }
       room.bullets.push(...shots);
     }
   }
@@ -289,10 +289,11 @@ function broadcastState(room, now) {
       weapon: p.weapon, kills: p.kills, deaths: p.deaths,
       respawnIn: p.deadUntil ? Math.max(1, Math.ceil((p.deadUntil - now) / 1000)) : 0,
     })),
-    monsters: room.monsters.map(m => ({ x: Math.round(m.x), y: Math.round(m.y) })),
-    bosses: room.bosses.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp), weapon: b.weapon })),
-    bullets: room.bullets.map(b => ({ x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss })),
-    pickups: room.pickups.map(pk => ({ x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon })),
+    // 实体带 id：客户端按 id 匹配前后帧做插值与死亡/消失特效
+    monsters: room.monsters.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y) })),
+    bosses: room.bosses.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp), weapon: b.weapon })),
+    bullets: room.bullets.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss })),
+    pickups: room.pickups.map(pk => ({ id: pk.id, x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon })),
   });
   for (const p of room.players.values()) if (p.ws.readyState === 1) p.ws.send(msg);
 }
