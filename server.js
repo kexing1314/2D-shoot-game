@@ -50,7 +50,8 @@ function pickKeys(k) {
 
 function enterRoom(ws, room, name) {
   const id = 'p' + (++eid);
-  const color = G.COLORS[room.players.size % G.COLORS.length];
+  const used = new Set([...room.players.values()].map(p => p.color));
+  const color = G.COLORS.find(c => !used.has(c)) || G.COLORS[0];
   const others = [...room.players.values()].filter(p => !p.deadUntil);
   const s = G.pickFarthestSpawn(G.PLAYER_SPAWNS, others);
   const p = {
@@ -204,6 +205,7 @@ function respawn(room, p, now) {
 }
 
 function damagePlayer(room, p, dmg, attackerId, now) {
+  if (p.deadUntil) return; // 已死亡玩家不再受伤（防止同tick多怪重复计死亡）
   p.hp -= dmg;
   p.lastDamagedAt = now;
   if (p.hp > 0) return;
