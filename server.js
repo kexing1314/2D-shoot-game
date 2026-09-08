@@ -79,7 +79,40 @@ function leave(ws) {
 
 // —— 游戏循环（Task 6–8 逐步充实函数体）——
 function tick(room) {
-  broadcastState(room, Date.now());
+  const now = Date.now();
+  const dt = G.TICK_MS / 1000;
+
+  // 1. 玩家：移动 + 回血 + 重生
+  for (const p of room.players.values()) {
+    if (p.deadUntil) {
+      if (now >= p.deadUntil) respawn(room, p, now);
+      continue;
+    }
+    const dx = (p.keys.d ? 1 : 0) - (p.keys.a ? 1 : 0);
+    const dy = (p.keys.s ? 1 : 0) - (p.keys.w ? 1 : 0);
+    if (dx || dy) {
+      const l = Math.hypot(dx, dy); // 斜向不超速
+      const m = G.moveWithWalls(p.x, p.y,
+        dx / l * G.PLAYER.speed * dt, dy / l * G.PLAYER.speed * dt,
+        G.PLAYER.r, G.WALLS);
+      p.x = m.x; p.y = m.y;
+    }
+    G.regenStep(p, now, dt);
+  }
+
+  broadcastState(room, now);
+}
+
+function respawn(room, p, now) {
+  const others = [...room.players.values()].filter(o => o.id !== p.id && !o.deadUntil);
+  const s = G.pickFarthestSpawn(G.PLAYER_SPAWNS, others);
+  p.x = s.x; p.y = s.y;
+  p.hp = G.PLAYER.hpMax;
+  p.deadUntil = 0;
+  p.lastDamagedAt = now; // 重生后也走 3s 脱战才回血
+  p.weapon = 'pistol';
+  p.keys = {};
+  p.lastFire = now;
 }
 
 function broadcastState(room, now) {
