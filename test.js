@@ -24,7 +24,7 @@ for (const s of G.PLAYER_SPAWNS) {
   }
 }
 for (const [name, wp] of Object.entries(G.WEAPONS)) {
-  for (const f of ['rate', 'dmg', 'speed', 'count', 'spread', 'pierce', 'size']) {
+  for (const f of ['rate', 'dmg', 'speed', 'count', 'spread', 'pierce', 'size', 'range']) {
     assert.ok(f in wp, `武器 ${name} 缺字段 ${f}`);
   }
 }
@@ -55,8 +55,8 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
 {
   const bs = G.weaponFire('pistol', 0, 0, 'right', 1000, 0, 'p1');
   assert.equal(bs.length, 1);
-  assert.deepEqual({ dmg: bs[0].dmg, vx: bs[0].vx, vy: bs[0].vy, owner: bs[0].owner, pierce: bs[0].pierce },
-    { dmg: 25, vx: 500, vy: 0, owner: 'p1', pierce: false });
+  assert.deepEqual({ dmg: bs[0].dmg, vx: bs[0].vx, vy: bs[0].vy, owner: bs[0].owner, pierce: bs[0].pierce, range: bs[0].range },
+    { dmg: 25, vx: 500, vy: 0, owner: 'p1', pierce: false, range: 600 });
   // 冷却未到（200ms < 300ms）→ null
   assert.equal(G.weaponFire('pistol', 0, 0, 'right', 1200, 1000, 'p1'), null);
   // 未知武器 / 非法方向 → null
@@ -64,12 +64,14 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.equal(G.weaponFire('pistol', 0, 0, 'nope', 9e9, 0, 'p1'), null);
 }
 {
-  // 霰弹 3 颗扇形：朝 right 时 vy 分别 <0 / =0 / >0
+  // 霰弹 5 颗扇形：朝 right 时 vy 依次 <0 / <0 / =0 / >0 / >0
   const sg = G.weaponFire('shotgun', 0, 0, 'right', 5000, 0, 'p1');
-  assert.equal(sg.length, 3);
+  assert.equal(sg.length, 5);
   assert.ok(sg[0].vy < 0);
-  assert.ok(Math.abs(sg[1].vy) < 1e-9);
-  assert.ok(sg[2].vy > 0);
+  assert.ok(sg[1].vy < 0);
+  assert.ok(Math.abs(sg[2].vy) < 1e-9);
+  assert.ok(sg[3].vy > 0);
+  assert.ok(sg[4].vy > 0);
 }
 {
   // 重炮：慢速大弹、穿透
@@ -79,15 +81,24 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.equal(cn[0].size, 8);
 }
 {
-  const b = { x: 100, y: 100, vx: 500, vy: 0, size: 3, pierce: false };
+  const b = { x: 100, y: 100, vx: 500, vy: 0, size: 3, pierce: false, range: 600 };
   assert.equal(G.bulletStep(b, 0.05, []), true);
   assert.equal(b.x, 125);
+  assert.equal(b.range, 575); // 每 tick 扣飞行距离 500×0.05=25
   // 撞墙移除
-  const b2 = { x: 190, y: 100, vx: 500, vy: 0, size: 3, pierce: true };
+  const b2 = { x: 190, y: 100, vx: 500, vy: 0, size: 3, pierce: true, range: 600 };
   assert.equal(G.bulletStep(b2, 0.05, [{ x: 200, y: 0, w: 20, h: 200 }]), false);
   // 出图移除（穿透弹也一样）
-  const b3 = { x: 3190, y: 100, vx: 500, vy: 0, size: 3, pierce: true };
+  const b3 = { x: 3190, y: 100, vx: 500, vy: 0, size: 3, pierce: true, range: 600 };
   assert.equal(G.bulletStep(b3, 0.05, []), false);
+  // 射程耗尽移除：剩 20px，飞 25px → 消失
+  const b4 = { x: 100, y: 100, vx: 500, vy: 0, size: 3, pierce: false, range: 20 };
+  assert.equal(G.bulletStep(b4, 0.05, []), false);
+  // 斜向飞行按实际距离扣（vx=vy≈353.55，速度 500）
+  const s = 500 / Math.SQRT2;
+  const b5 = { x: 100, y: 100, vx: s, vy: s, size: 3, pierce: false, range: 500 };
+  assert.equal(G.bulletStep(b5, 0.05, []), true);
+  assert.ok(Math.abs(b5.range - 475) < 1e-9);
 }
 
 // —— Task 4: 追击 / 恢复 / 选点 ——

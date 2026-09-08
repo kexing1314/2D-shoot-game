@@ -120,7 +120,7 @@ function bar(x, y, w, frac) {
 const WEAPON_NAMES = { pistol: '手枪', mg: '机枪', shotgun: '霰弹枪', cannon: '加农炮' };
 
 function statusBar(me) {
-  const bw = 480, bh = 54;
+  const bw = 620, bh = 54;
   const x = (canvas.width - bw) / 2, y = canvas.height - bh - 10;
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.beginPath(); ctx.roundRect(x, y, bw, bh, 10); ctx.fill();
@@ -132,12 +132,21 @@ function statusBar(me) {
   ctx.fillRect(hx, hy, hw * frac, hh);
   ctx.fillStyle = '#fff'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(`${me.hp} / ${G.PLAYER.hpMax}`, hx + hw / 2, hy + 14);
-  // 武器名 + K/D
+  // 武器名 + 详情（伤害/射程/穿透，数值直接读武器表，加武器零改动）
+  const tx = hx + hw + 20;
   ctx.textAlign = 'left';
   ctx.font = '16px sans-serif'; ctx.fillStyle = '#ffd700';
-  ctx.fillText(WEAPON_NAMES[me.weapon] || me.weapon, hx + hw + 20, y + 25);
+  const wname = WEAPON_NAMES[me.weapon] || me.weapon;
+  ctx.fillText(wname, tx, y + 25);
+  const nameW = ctx.measureText(wname).width; // 必须在 16px 字体下量
+  const w = G.WEAPONS[me.weapon];
+  if (w) {
+    ctx.font = '12px sans-serif'; ctx.fillStyle = '#999';
+    ctx.fillText(`伤害 ${w.dmg}${w.count > 1 ? '×' + w.count : ''} · 射程 ${w.range}${w.pierce ? ' · 穿透' : ''}`,
+      tx + nameW + 10, y + 25);
+  }
   ctx.font = '13px sans-serif'; ctx.fillStyle = '#ccc';
-  ctx.fillText(`击杀 ${me.kills} · 死亡 ${me.deaths}`, hx + hw + 20, y + 44);
+  ctx.fillText(`击杀 ${me.kills} · 死亡 ${me.deaths}`, tx, y + 44);
 }
 
 function drawHUD(me) {

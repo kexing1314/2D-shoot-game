@@ -13,12 +13,12 @@ const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000, spawnEve
 const BOSS    = { r: 32, hp: 300, speed: 80, dmg: 25, cooldownMs: 1000, spawnEveryMs: 40000, cap: 2 };
 const ROOM    = { maxPlayers: 4, codeLen: 4 };
 
-// 武器表：加武器 = 加一行；射击逻辑只读这张表
+// 武器表：加武器 = 加一行；射击逻辑只读这张表。range = 子弹最大飞行距离（px）
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, spread: 0,  pierce: false, size: 3 },
-  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, spread: 0,  pierce: false, size: 3 },
-  shotgun: { rate: 600, dmg: 15, speed: 500, count: 3, spread: 15, pierce: false, size: 3 },
-  cannon:  { rate: 800, dmg: 60, speed: 300, count: 1, spread: 0,  pierce: true,  size: 8 },
+  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, spread: 0,  pierce: false, size: 3, range: 600 },
+  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, spread: 0,  pierce: false, size: 3, range: 500 },
+  shotgun: { rate: 600, dmg: 15, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400 },
+  cannon:  { rate: 800, dmg: 60, speed: 300, count: 1, spread: 0,  pierce: true,  size: 8, range: 1100 },
 };
 
 const COLORS = ['#4a9eff', '#ff9f43', '#2ecc71', '#e84393'];
@@ -83,16 +83,18 @@ function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner) {
     bullets.push({
       x, y,
       vx: Math.cos(a) * w.speed, vy: Math.sin(a) * w.speed,
-      dmg: w.dmg, size: w.size, pierce: w.pierce, owner,
+      dmg: w.dmg, size: w.size, pierce: w.pierce, owner, range: w.range,
     });
   }
   return bullets;
 }
 
-// 推进一颗子弹；false = 移除（出图或撞墙，穿透弹撞墙同样移除）
+// 推进一颗子弹；false = 移除（射程耗尽、出图或撞墙，穿透弹撞墙同样移除）
 function bulletStep(b, dtSec, walls) {
+  b.range -= Math.hypot(b.vx, b.vy) * dtSec;
   b.x += b.vx * dtSec;
   b.y += b.vy * dtSec;
+  if (b.range <= 0) return false;
   if (b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h) return false;
   return !walls.some(w => circleRectHit(b.x, b.y, b.size, w));
 }
