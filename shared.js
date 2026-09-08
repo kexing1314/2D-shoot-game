@@ -69,6 +69,34 @@ function moveWithWalls(x, y, dx, dy, r, walls) {
   return { x: nx, y: ny };
 }
 
+const DIRS = { up: { x: 0, y: -1 }, down: { x: 0, y: 1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } };
+
+// 冷却未到 / 参数非法 → null；否则返回子弹数组（扇形以 dir 为中心对称展开）
+function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner) {
+  const w = WEAPONS[weaponKey];
+  if (!w || !DIRS[dir] || now - lastFireAt < w.rate) return null;
+  const base = Math.atan2(DIRS[dir].y, DIRS[dir].x);
+  const spread = w.spread * Math.PI / 180;
+  const bullets = [];
+  for (let i = 0; i < w.count; i++) {
+    const a = base + (i - (w.count - 1) / 2) * spread;
+    bullets.push({
+      x, y,
+      vx: Math.cos(a) * w.speed, vy: Math.sin(a) * w.speed,
+      dmg: w.dmg, size: w.size, pierce: w.pierce, owner,
+    });
+  }
+  return bullets;
+}
+
+// 推进一颗子弹；false = 移除（出图或撞墙，穿透弹撞墙同样移除）
+function bulletStep(b, dtSec, walls) {
+  b.x += b.vx * dtSec;
+  b.y += b.vy * dtSec;
+  if (b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h) return false;
+  return !walls.some(w => circleRectHit(b.x, b.y, b.size, w));
+}
+
 return { MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, WALLS, PLAYER_SPAWNS, BOSS_SPAWNS,
-  dist, circleRectHit, moveWithWalls };
+  dist, circleRectHit, moveWithWalls, DIRS, weaponFire, bulletStep };
 });
