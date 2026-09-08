@@ -116,8 +116,56 @@ function bar(x, y, w, frac) {
   ctx.fillStyle = '#2ecc71'; ctx.fillRect(x - w / 2, y - 4, w * clamp(frac, 0, 1), 5);
 }
 
-// Task 11 替换为完整 HUD
-function drawHUD(me) {}
+// —— HUD ——
+function drawHUD(me) {
+  // 计分板（左上，按击杀降序）
+  ctx.textAlign = 'left';
+  ctx.font = '14px sans-serif';
+  const rows = [...state.players].sort((a, b) => b.kills - a.kills);
+  rows.forEach((p, i) => {
+    ctx.fillStyle = p.color;
+    ctx.fillText(`${p.name}  ${p.kills}/${p.deaths}`, 12, 24 + i * 20);
+  });
+  // 房间码（顶中，便于转发）
+  ctx.fillStyle = '#888';
+  ctx.textAlign = 'center';
+  ctx.fillText('房间 ' + roomCode, canvas.width / 2, 20);
+  // 雷达小地图（右上）
+  minimap();
+  // 死亡遮罩
+  if (me.respawnIn > 0) {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = '36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(me.respawnIn + ' 秒后重生', canvas.width / 2, canvas.height / 2);
+  }
+}
+
+function minimap() {
+  const mw = 200, mh = mw * G.MAP.h / G.MAP.w; // 200 × 112.5
+  const ox = canvas.width - mw - 10, oy = 10;
+  const sx = mw / G.MAP.w, sy = mh / G.MAP.h;
+  const dot = (x, y, r) => { ctx.beginPath(); ctx.arc(ox + x * sx, oy + y * sy, r, 0, Math.PI * 2); ctx.fill(); };
+
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(ox, oy, mw, mh);
+  ctx.fillStyle = '#3d4a6b';
+  for (const w of G.WALLS) ctx.fillRect(ox + w.x * sx, oy + w.y * sy, Math.max(1, w.w * sx), Math.max(1, w.h * sy));
+  ctx.fillStyle = '#ffd700';
+  for (const pk of state.pickups) dot(pk.x, pk.y, 1.5);
+  ctx.fillStyle = '#ff5252';
+  for (const m of state.monsters) dot(m.x, m.y, 1);
+  ctx.fillStyle = '#9b59b6';
+  for (const b of state.bosses) dot(b.x, b.y, 4); // Boss 大紫点
+  for (const p of state.players) {
+    if (p.respawnIn > 0) continue;
+    ctx.fillStyle = p.color;
+    dot(p.x, p.y, p.id === myId ? 3.5 : 2.5);
+    if (p.id === myId) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke(); }
+  }
+}
 
 // —— 输入：按键变化时才发 input ——
 const keys = {};
