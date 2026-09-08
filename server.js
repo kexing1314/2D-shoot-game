@@ -160,6 +160,34 @@ function tick(room) {
     return true;
   });
 
+  // 4. 怪物 / Boss：追最近的活人，接触伤害 + 冷却
+  const alive = [...room.players.values()].filter(p => !p.deadUntil);
+  for (const [list, cfg] of [[room.monsters, G.MONSTER], [room.bosses, G.BOSS]]) {
+    for (const m of list) {
+      const target = nearest(alive, m.x, m.y);
+      G.chaseStep(m, cfg.r, target, cfg.speed, dt, G.WALLS);
+      if (target && now >= m.nextHit && G.dist(m.x, m.y, target.x, target.y) < cfg.r + G.PLAYER.r) {
+        damagePlayer(room, target, cfg.dmg, null, now);
+        m.nextHit = now + cfg.cooldownMs;
+      }
+    }
+  }
+
+  // 5. 刷怪（房间里有人就刷；全部重生中也刷）
+  if (room.players.size > 0) {
+    if (now - room.lastMonster >= G.MONSTER.spawnEveryMs && room.monsters.length < G.MONSTER.cap) {
+      room.lastMonster = now;
+      room.monsters.push(edgeSpawn());
+    }
+    if (now - room.lastBoss >= G.BOSS.spawnEveryMs && room.bosses.length < G.BOSS.cap) {
+      const s = G.pickBossSpawn(G.BOSS_SPAWNS, room.bosses, alive);
+      if (s) {
+        room.lastBoss = now;
+        room.bosses.push({ id: ++eid, x: s.x, y: s.y, hp: G.BOSS.hp, nextHit: 0 });
+      }
+    }
+  }
+
   broadcastState(room, now);
 }
 
@@ -197,6 +225,27 @@ function damagePlayer(room, p, dmg, attackerId, now) {
 function dropWeapon() {
   const names = Object.keys(G.WEAPONS).filter(w => w !== 'pistol');
   return names[Math.floor(Math.random() * names.length)];
+}
+
+function edgeSpawn() {
+  const m = 60; // 距边缘留白，避开 20px 边界墙
+  const side = Math.floor(Math.random() * 4);
+  const rx = () => m + Math.random() * (G.MAP.w - 2 * m);
+  const ry = () => m + Math.random() * (G.MAP.h - 2 * m);
+  const pos = side === 0 ? { x: rx(), y: m }
+    : side === 1 ? { x: rx(), y: G.MAP.h - m }
+    : side === 2 ? { x: m, y: ry() }
+    : { x: G.MAP.w - m, y: ry() };
+  return { id: ++eid, x: pos.x, y: pos.y, hp: G.MONSTER.hp, nextHit: 0 };
+}
+
+function nearest(list, x, y) {
+  let best = null, bd = Infinity;
+  for (const o of list) {
+    const d = G.dist(x, y, o.x, o.y);
+    if (d < bd) { bd = d; best = o; }
+  }
+  return best;
 }
 
 function broadcastState(room, now) {
