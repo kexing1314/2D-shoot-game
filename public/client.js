@@ -48,12 +48,18 @@ let prev = null, recvTime = 0;   // 插值：实体画在 prev 与 state 之间
 let parts = [];                  // 粒子（世界坐标，纯客户端特效，上限 300）
 let lastFrame = performance.now();
 let shake = 0, flash = 0;        // 自己受击反馈：屏幕震动 / 红闪
+const recoil = new Map();        // 玩家id → 后坐截止时刻（新子弹在谁身边冒出谁后坐）
 
 // 状态 diff → 推测事件放粒子（子弹消失≈命中/撞墙，客户端不区分，火花一样小）
 function detect(p0, s) {
   const gone = (a, b) => a.filter(x => !b.some(y => y.id === x.id));
   const born = (a, b) => b.filter(x => !a.some(y => y.id === x.id));
-  for (const b of born(p0.bullets, s.bullets)) burst(b.x, b.y, 3, '#fff8c4', 60, 0.12, 2);   // 枪口闪光
+  for (const b of born(p0.bullets, s.bullets)) {                                             // 枪口闪光 + 射手后坐
+    burst(b.x, b.y, 3, '#fff8c4', 60, 0.12, 2);
+    if (b.boss) continue;
+    const shooter = s.players.find(p => p.respawnIn === 0 && Math.hypot(p.x - b.x, p.y - b.y) < G.PLAYER.r + 14);
+    if (shooter) recoil.set(shooter.id, performance.now() + 100);
+  }
   for (const b of gone(p0.bullets, s.bullets)) burst(b.x, b.y, 5, b.boss ? '#ff5252' : '#ffd93d', 120, 0.25, 2); // 命中火花
   for (const m of gone(p0.monsters, s.monsters)) burst(m.x, m.y, 14, '#ff7043', 180, 0.5, 3);
   for (const b of gone(p0.bosses, s.bosses)) burst(b.x, b.y, 40, '#b06ce0', 260, 0.8, 5);    // Boss 大紫爆
@@ -147,6 +153,23 @@ function render() {
     ctx.strokeRect(-8, -8, 16, 16);
     ctx.restore();
   }
+  // Boss 红色警戒线：最近活人进入所持武器射程即锁定（虚线流动；停火期也显示 = 被锁定）
+  {
+    const living = state.players.filter(p => p.respawnIn === 0);
+    for (const b0 of state.bosses) {
+      if (!living.length) break;
+      let tgt = null, bd = Infinity;
+      for (const p of living) { const d = G.dist(b0.x, b0.y, p.x, p.y); if (d < bd) { bd = d; tgt = p; } }
+      if (!tgt || bd > G.WEAPONS[b0.weapon].range) continue;
+      const bb = lp(b0, maps.bosses), tt = lp(tgt, maps.players);
+      ctx.strokeStyle = 'rgba(255,80,80,0.35)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 8]);
+      ctx.lineDashOffset = -t / 30;
+      ctx.beginPath(); ctx.moveTo(bb.x, bb.y); ctx.lineTo(tt.x, tt.y); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
   // 怪物（红三角：光晕 + 呼吸脉动 + 描边）
   for (const m0 of state.monsters) {
     const m = lp(m0, maps.monsters);
@@ -196,6 +219,15 @@ function render() {
     ctx.globalAlpha = 0.18; ctx.fillStyle = p0.color;
     circ(p.x, p.y, G.PLAYER.r * 1.7);
     ctx.globalAlpha = 1;
+    // 炮管（朝向来自服务器开火记录）+ 后坐 2px（100ms 回弹）
+    if (p0.face) {
+      const rec = (recoil.get(p0.id) || 0) > t ? 2 : 0;
+      ctx.strokeStyle = '#cfd8e3'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p.x + p0.face.x * 6, p.y + p0.face.y * 6);
+      ctx.lineTo(p.x + p0.face.x * (G.PLAYER.r + 6 - rec), p.y + p0.face.y * (G.PLAYER.r + 6 - rec));
+      ctx.stroke();
+    }
     const gr = ctx.createRadialGradient(p.x - 5, p.y - 5, 2, p.x, p.y, G.PLAYER.r);
     gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, p0.color);
     ctx.fillStyle = gr;
@@ -223,6 +255,22 @@ function render() {
 
   ctx.restore();
 
+  // 常驻暗角（纵深感）
+  const vg = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, canvas.height * 0.45,
+    canvas.width / 2, canvas.height / 2, canvas.height * 0.85);
+  vg.addColorStop(0, 'rgba(0,0,0,0)');
+  vg.addColorStop(1, 'rgba(0,0,0,0.35)');
+  ctx.fillStyle = vg;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // 低血量（<30%）红色呼吸脉冲警告
+  if (meCur.respawnIn === 0 && meCur.hp < G.PLAYER.hpMax * 0.3) {
+    const rg = ctx.createRadialGradient(canvas.width / 2, canvas.height / 2, canvas.height * 0.35,
+      canvas.width / 2, canvas.height / 2, canvas.height * 0.8);
+    rg.addColorStop(0, 'rgba(255,0,0,0)');
+    rg.addColorStop(1, `rgba(255,0,0,${(0.18 + 0.12 * Math.sin(t / 250)).toFixed(3)})`);
+    ctx.fillStyle = rg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
   // 自己受伤红闪（全屏叠加）
   if (flash > 0) {
     flash = Math.max(0, flash - dt * 4);

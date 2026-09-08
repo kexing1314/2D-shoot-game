@@ -104,7 +104,7 @@ function tick(room) {
     const dir = now >= (p.fireStunUntil || 0) ? G.fireDir(p.keys) : null;
     if (dir) {
       const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id);
-      if (bs) { p.lastFire = now; for (const x of bs) x.id = ++eid; room.bullets.push(...bs); }
+      if (bs) { p.lastFire = now; p.face = dir; for (const x of bs) x.id = ++eid; room.bullets.push(...bs); }
     }
   }
 
@@ -286,7 +286,7 @@ function broadcastState(room, now) {
     players: [...room.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color,
       x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp),
-      weapon: p.weapon, kills: p.kills, deaths: p.deaths,
+      weapon: p.weapon, kills: p.kills, deaths: p.deaths, face: p.face,
       respawnIn: p.deadUntil ? Math.max(1, Math.ceil((p.deadUntil - now) / 1000)) : 0,
     })),
     // 实体带 id：客户端按 id 匹配前后帧做插值与死亡/消失特效
