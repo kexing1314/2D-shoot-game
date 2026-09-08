@@ -90,4 +90,39 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.equal(G.bulletStep(b3, 0.05, []), false);
 }
 
+// —— Task 4: 追击 / 恢复 / 选点 ——
+{
+  const m = { x: 0, y: 0 };
+  G.chaseStep(m, 14, { x: 100, y: 0 }, 60, 0.05, []);
+  assert.ok(Math.abs(m.x - 3) < 1e-9); // 60 px/s × 0.05s
+  G.chaseStep(m, 14, null, 60, 0.05, []);
+  assert.ok(Math.abs(m.x - 3) < 1e-9); // 无目标不动
+}
+{
+  const p = { hp: 50, lastDamagedAt: 0, deadUntil: 0 };
+  G.regenStep(p, 2999, 0.05);
+  assert.equal(p.hp, 50);                    // 未脱战 3s，不回
+  G.regenStep(p, 3000, 0.05);
+  assert.ok(Math.abs(p.hp - 50.1) < 1e-9);   // +2/s × 0.05s
+  p.hp = 99.95;
+  G.regenStep(p, 99999, 0.05);
+  assert.equal(p.hp, 100);                   // 封顶
+  p.hp = 50; p.deadUntil = 5;
+  G.regenStep(p, 99999, 0.05);
+  assert.equal(p.hp, 50);                    // 死亡不回
+}
+{
+  const spawns = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 200, y: 0 }];
+  assert.deepEqual(G.pickFarthestSpawn(spawns, [{ x: 0, y: 0 }]), { x: 200, y: 0 });
+  assert.deepEqual(G.pickFarthestSpawn(spawns, []), { x: 0, y: 0 });
+}
+{
+  // (400,1500) 被 Boss 占据 → 只能选另两个；玩家在 (400,1500) → 选最远的 (2800,300)
+  const s = G.pickBossSpawn(G.BOSS_SPAWNS, [{ x: 400, y: 1500 }], [{ x: 400, y: 1500 }]);
+  assert.deepEqual(s, { x: 2800, y: 300 });
+  // 全部被占 → null
+  const all = G.pickBossSpawn(G.BOSS_SPAWNS, G.BOSS_SPAWNS.map(p => ({ x: p.x, y: p.y })), []);
+  assert.equal(all, null);
+}
+
 console.log('all tests passed');

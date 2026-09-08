@@ -97,6 +97,41 @@ function bulletStep(b, dtSec, walls) {
   return !walls.some(w => circleRectHit(b.x, b.y, b.size, w));
 }
 
+// 直线追击（受墙阻挡；不做寻路——被墙卡住属可接受行为）
+function chaseStep(e, r, target, speed, dtSec, walls) {
+  if (!target) return;
+  const d = dist(e.x, e.y, target.x, target.y);
+  if (d === 0) return;
+  const p = moveWithWalls(e.x, e.y,
+    (target.x - e.x) / d * speed * dtSec,
+    (target.y - e.y) / d * speed * dtSec, r, walls);
+  e.x = p.x; e.y = p.y;
+}
+
+// 脱战 regenDelayMs 后每秒回 regenPerSec，hpMax 封顶
+function regenStep(p, now, dtSec) {
+  if (p.deadUntil) return;
+  if (now - p.lastDamagedAt >= PLAYER.regenDelayMs && p.hp < PLAYER.hpMax) {
+    p.hp = Math.min(PLAYER.hpMax, p.hp + PLAYER.regenPerSec * dtSec);
+  }
+}
+
+function pickFarthestSpawn(spawns, others) {
+  let best = spawns[0], bestD = -1;
+  for (const s of spawns) {
+    const d = others.length ? Math.min(...others.map(o => dist(s.x, s.y, o.x, o.y))) : Infinity;
+    if (d > bestD) { bestD = d; best = s; }
+  }
+  return best;
+}
+
+function pickBossSpawn(spawns, bosses, players) {
+  const free = spawns.filter(s => !bosses.some(b => dist(b.x, b.y, s.x, s.y) < 100));
+  if (!free.length) return null;
+  return pickFarthestSpawn(free, players);
+}
+
 return { MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, WALLS, PLAYER_SPAWNS, BOSS_SPAWNS,
-  dist, circleRectHit, moveWithWalls, DIRS, weaponFire, bulletStep };
+  dist, circleRectHit, moveWithWalls, DIRS, weaponFire, bulletStep,
+  chaseStep, regenStep, pickFarthestSpawn, pickBossSpawn };
 });
