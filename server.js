@@ -98,7 +98,67 @@ function tick(room) {
       p.x = m.x; p.y = m.y;
     }
     G.regenStep(p, now, dt);
+
+    // 射击：每 tick 只朝第一个按下的方向开火
+    for (const dir of ['up', 'down', 'left', 'right']) {
+      if (!p.keys[dir]) continue;
+      const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id);
+      if (bs) { p.lastFire = now; room.bullets.push(...bs); }
+      break;
+    }
   }
+
+  // 2. 子弹：推进 + 命中
+  room.bullets = room.bullets.filter(b => {
+    if (!G.bulletStep(b, dt, G.WALLS)) return false;
+    // 命中玩家（不打自己、不打死人）
+    for (const p of room.players.values()) {
+      if (p.id === b.owner || p.deadUntil) continue;
+      if (G.dist(b.x, b.y, p.x, p.y) >= G.PLAYER.r + b.size) continue;
+      if (b.pierce) {
+        b.hitIds = b.hitIds || [];
+        if (b.hitIds.includes(p.id)) continue;
+        b.hitIds.push(p.id);
+        damagePlayer(room, p, b.dmg, b.owner, now);
+      } else {
+        damagePlayer(room, p, b.dmg, b.owner, now);
+        return false;
+      }
+    }
+    // 命中怪物 / Boss
+    for (const [list, r, isBoss] of [[room.monsters, G.MONSTER.r, false], [room.bosses, G.BOSS.r, true]]) {
+      for (let i = list.length - 1; i >= 0; i--) {
+        const m = list[i];
+        if (G.dist(b.x, b.y, m.x, m.y) >= r + b.size) continue;
+        const tag = (isBoss ? 'b' : 'm') + m.id;
+        if (b.pierce) {
+          b.hitIds = b.hitIds || [];
+          if (b.hitIds.includes(tag)) continue;
+          b.hitIds.push(tag);
+        }
+        m.hp -= b.dmg;
+        if (m.hp <= 0) {
+          list.splice(i, 1);
+          const killer = room.players.get(b.owner);
+          if (killer) killer.kills++;
+          if (isBoss) room.pickups.push({ id: ++eid, x: m.x, y: m.y, weapon: dropWeapon() });
+        }
+        if (!b.pierce) return false;
+      }
+    }
+    return true;
+  });
+
+  // 3. 拾取物：碰到活人即换武器
+  room.pickups = room.pickups.filter(pk => {
+    for (const p of room.players.values()) {
+      if (!p.deadUntil && G.dist(p.x, p.y, pk.x, pk.y) < G.PLAYER.r + 10) {
+        p.weapon = pk.weapon;
+        return false;
+      }
+    }
+    return true;
+  });
 
   broadcastState(room, now);
 }
@@ -113,6 +173,30 @@ function respawn(room, p, now) {
   p.weapon = 'pistol';
   p.keys = {};
   p.lastFire = now;
+}
+
+function damagePlayer(room, p, dmg, attackerId, now) {
+  p.hp -= dmg;
+  p.lastDamagedAt = now;
+  if (p.hp > 0) return;
+  p.hp = 0;
+  p.deaths++;
+  p.deadUntil = now + G.PLAYER.respawnMs;
+  p.keys = {};
+  if (attackerId) {
+    const a = room.players.get(attackerId);
+    if (a) a.kills++;
+  }
+  // 死亡掉落手中武器（pistol 不掉），成为争夺点
+  if (p.weapon !== 'pistol') {
+    room.pickups.push({ id: ++eid, x: p.x, y: p.y, weapon: p.weapon });
+  }
+  p.weapon = 'pistol';
+}
+
+function dropWeapon() {
+  const names = Object.keys(G.WEAPONS).filter(w => w !== 'pistol');
+  return names[Math.floor(Math.random() * names.length)];
 }
 
 function broadcastState(room, now) {
