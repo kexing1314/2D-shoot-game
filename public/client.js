@@ -340,7 +340,13 @@ function statusBar(me) {
       tx + nameW + 10, y + 25);
   }
   ctx.font = '13px sans-serif'; ctx.fillStyle = '#ccc';
-  ctx.fillText(`击杀 ${me.kills} · 死亡 ${me.deaths}`, tx, y + 44);
+  const line2 = `击杀 ${me.kills} · 死亡 ${me.deaths} · 弹药 ${me.ammo}/${w ? w.mag : '?'}`;
+  ctx.fillText(line2, tx, y + 44);
+  // 换弹中：黄字闪烁提示（纯视觉，服务器 authoritative）
+  if (me.reloading && Math.sin(performance.now() / 120) > 0) {
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText('换弹中…', tx + ctx.measureText(line2).width + 10, y + 44);
+  }
 }
 
 function drawHUD(me) {
@@ -397,7 +403,7 @@ function minimap() {
 
 // —— 输入：按键变化时才发 input ——
 const keys = {};
-const KEYMAP = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd',
+const KEYMAP = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyR: 'r',
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
 function sendInput() {

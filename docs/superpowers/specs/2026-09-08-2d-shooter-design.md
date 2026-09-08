@@ -68,10 +68,10 @@ game/
 
 ```js
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, pierce: false, size: 3, range: 600 },
-  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, pierce: false, size: 3, range: 500 },
-  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400 },
-  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, pierce: true,  size: 8, range: 640, explode: 160, explodeDmg: 40 },
+  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, pierce: false, size: 3, range: 600, mag: 12, reloadMs: 1000 },
+  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, pierce: false, size: 3, range: 500, mag: 40, reloadMs: 1800 },
+  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400, mag: 5, reloadMs: 1500 },
+  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, pierce: true,  size: 8, range: 640, explode: 160, explodeDmg: 40, mag: 2, reloadMs: 2000 },
 }
 ```
 
@@ -80,6 +80,7 @@ const WEAPONS = {
 - range = 子弹最大飞行距离（px），飞满即消失；霰弹枪贴脸爆发
 - **加农炮爆炸弹**：射程 = 玩家横向视野一半（1280/2=640），飞到射程终点或撞墙爆炸，对半径 160px 内目标造成 40 点 AOE 伤害 + 沿爆心向外击退，不伤射手自己；飞行途中直接命中的目标吃 80 穿透伤。Boss 持加农炮时爆炸只伤玩家（与 Boss 子弹只打玩家一致）；客户端按广播的 boom 标记画橙色爆炸粒子
 - Boss 刷新时从表中随机选一个非 pistol 武器持有
+- **换弹**：每把枪有弹匣 mag，每次开火（霰弹 5 颗算 1 发）消耗 1 弹药；打空自动换弹，R 键手动换弹（边沿触发，按住不连换）；换弹开始即补满弹药，reloadMs 期间不能开火（移动不受影响）；重生/拾取武器时弹匣补满、换弹中断；Boss 弹药无限（restMs 停火期即其天然换弹）
 
 ### 4.4 普通怪物
 
@@ -122,14 +123,14 @@ const WEAPONS = {
 |---|---|---|
 | `create` | 点"创建房间" | `{t:"create", name}` |
 | `join` | 点"加入房间" | `{t:"join", name, code}` |
-| `input` | 按键变化时（keydown/keyup 触发才发） | `{t:"input", keys:{w,a,s,d,up,down,left,right}}` |
+| `input` | 按键变化时（keydown/keyup 触发才发） | `{t:"input", keys:{w,a,s,d,up,down,left,right,r}}` |
 
 服务器 → 客户端：
 
 | 消息 | 时机 | 内容 |
 |---|---|---|
 | `joined` | 进房成功 | 玩家 id、房间码、玩家颜色 |
-| `state` | 每 tick（20Hz） | 全部玩家（位置/HP/武器/分数/死亡倒计时/射击朝向 face）、怪物、Boss、子弹、拾取物；实体均带 id（客户端按 id 匹配前后帧做插值与消失特效） |
+| `state` | 每 tick（20Hz） | 全部玩家（位置/HP/武器/弹药 ammo/换弹中 reloading/分数/死亡倒计时/射击朝向 face）、怪物、Boss、子弹、拾取物；实体均带 id（客户端按 id 匹配前后帧做插值与消失特效） |
 | `error` | 房间码不存在 / 房间满 | 提示文本，客户端弹回大厅 |
 
 全量广播，不做增量 diff、不压缩（2–4 人 + 20 怪 + 2 Boss，每次几 KB，diff 是负优化）。
@@ -155,6 +156,7 @@ const WEAPONS = {
 
 - **右上角小地图**（约 200×112）：全图缩放轮廓 + 墙体 + 全部玩家/怪物/Boss/拾取物位置点（雷达模式），Boss 为大紫点
 - **左上角计分板**：每个玩家的击杀/死亡
+- **底部状态栏**：大血条 + 武器名与详情（伤害/射程/穿透/爆炸）+ 击杀/死亡 + 弹药 x/mag；换弹中黄字闪烁"换弹中…"
 - 死亡时屏幕中央显示"3 秒后重生"
 
 ## 7. 异常处理

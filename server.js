@@ -44,7 +44,7 @@ function send(ws, m) { if (ws.readyState === 1) ws.send(JSON.stringify(m)); }
 function pickKeys(k) {
   k = k || {};
   const out = {};
-  for (const key of ['w', 'a', 's', 'd', 'up', 'down', 'left', 'right']) out[key] = !!k[key];
+  for (const key of ['w', 'a', 's', 'd', 'up', 'down', 'left', 'right', 'r']) out[key] = !!k[key];
   return out;
 }
 
@@ -59,6 +59,7 @@ function enterRoom(ws, room, name) {
     x: s.x, y: s.y, hp: G.PLAYER.hpMax, weapon: 'pistol',
     kills: 0, deaths: 0, keys: {},
     lastFire: -1e9, lastDamagedAt: -1e9, deadUntil: 0,
+    ammo: G.WEAPONS.pistol.mag, reloadUntil: 0, prevR: false,
   };
   room.players.set(id, p);
   ws.room = room; ws.playerId = id;
@@ -101,11 +102,19 @@ function tick(room) {
     }
     G.regenStep(p, now, dt);
 
-    // 射击：方向键合成向量（两键同按斜射，对键抵消不开火）；受伤硬直期内停火
-    const dir = now >= (p.fireStunUntil || 0) ? G.fireDir(p.keys) : null;
+    // 换弹：打空自动 / R 键手动（边沿触发防按住连换）；立即补满弹匣，换弹期间不能开火
+    const w = G.WEAPONS[p.weapon];
+    if (now >= p.reloadUntil && (p.ammo <= 0 || (p.keys.r && !p.prevR && p.ammo < w.mag))) {
+      p.ammo = w.mag;
+      p.reloadUntil = now + w.reloadMs;
+    }
+    p.prevR = !!p.keys.r;
+
+    // 射击：方向键合成向量（两键同按斜射，对键抵消不开火）；受伤硬直/换弹期内停火
+    const dir = now >= (p.fireStunUntil || 0) && now >= p.reloadUntil ? G.fireDir(p.keys) : null;
     if (dir) {
       const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id);
-      if (bs) { p.lastFire = now; p.face = dir; for (const x of bs) x.id = ++eid; room.bullets.push(...bs); }
+      if (bs) { p.ammo--; p.lastFire = now; p.face = dir; for (const x of bs) x.id = ++eid; room.bullets.push(...bs); }
     }
   }
 
@@ -153,6 +162,7 @@ function tick(room) {
     for (const p of room.players.values()) {
       if (!p.deadUntil && G.dist(p.x, p.y, pk.x, pk.y) < G.PLAYER.r + 10) {
         p.weapon = pk.weapon;
+        p.ammo = G.WEAPONS[pk.weapon].mag; p.reloadUntil = 0; // 换枪即满弹
         return false;
       }
     }
@@ -217,6 +227,7 @@ function respawn(room, p, now) {
   p.deadUntil = 0;
   p.lastDamagedAt = now; // 重生后也走 3s 脱战才回血
   p.weapon = 'pistol';
+  p.ammo = G.WEAPONS.pistol.mag; p.reloadUntil = 0;
   p.keys = {};
   p.lastFire = now;
 }
@@ -253,6 +264,7 @@ function damagePlayer(room, p, dmg, attackerId, now, src) {
     room.pickups.push({ id: ++eid, x: p.x, y: p.y, weapon: p.weapon });
   }
   p.weapon = 'pistol';
+  p.ammo = G.WEAPONS.pistol.mag; p.reloadUntil = 0;
 }
 
 // 对怪物/Boss 结算伤害；死亡则移出数组、记击杀、Boss 掉落所持武器（争夺点）
@@ -315,6 +327,7 @@ function broadcastState(room, now) {
       id: p.id, name: p.name, color: p.color,
       x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp),
       weapon: p.weapon, kills: p.kills, deaths: p.deaths, face: p.face,
+      ammo: p.ammo, reloading: now < p.reloadUntil,
       boost: p.panicUntil > now, // 低血加速中（客户端画残影提示）
       respawnIn: p.deadUntil ? Math.max(1, Math.ceil((p.deadUntil - now) / 1000)) : 0,
     })),
