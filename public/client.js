@@ -116,6 +116,30 @@ function bar(x, y, w, frac) {
 }
 
 // —— HUD ——
+// 加武器时在 WEAPONS 表加数值、这里加一行中文名
+const WEAPON_NAMES = { pistol: '手枪', mg: '机枪', shotgun: '霰弹枪', cannon: '加农炮' };
+
+function statusBar(me) {
+  const bw = 480, bh = 54;
+  const x = (canvas.width - bw) / 2, y = canvas.height - bh - 10;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.beginPath(); ctx.roundRect(x, y, bw, bh, 10); ctx.fill();
+  // 大血条（绿→黄→红）
+  const frac = clamp(me.hp / G.PLAYER.hpMax, 0, 1);
+  const hx = x + 16, hy = y + 18, hw = 220, hh = 18;
+  ctx.fillStyle = '#333'; ctx.fillRect(hx, hy, hw, hh);
+  ctx.fillStyle = frac > 0.5 ? '#2ecc71' : frac > 0.25 ? '#f1c40f' : '#e74c3c';
+  ctx.fillRect(hx, hy, hw * frac, hh);
+  ctx.fillStyle = '#fff'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(`${me.hp} / ${G.PLAYER.hpMax}`, hx + hw / 2, hy + 14);
+  // 武器名 + K/D
+  ctx.textAlign = 'left';
+  ctx.font = '16px sans-serif'; ctx.fillStyle = '#ffd700';
+  ctx.fillText(WEAPON_NAMES[me.weapon] || me.weapon, hx + hw + 20, y + 25);
+  ctx.font = '13px sans-serif'; ctx.fillStyle = '#ccc';
+  ctx.fillText(`击杀 ${me.kills} · 死亡 ${me.deaths}`, hx + hw + 20, y + 44);
+}
+
 function drawHUD(me) {
   // 计分板（左上，按击杀降序）
   ctx.textAlign = 'left';
@@ -131,6 +155,8 @@ function drawHUD(me) {
   ctx.fillText('房间 ' + roomCode, canvas.width / 2, 20);
   // 雷达小地图（右上）
   minimap();
+  // 底部状态栏（自己的血量/武器/K-D）
+  statusBar(me);
   // 死亡遮罩
   if (me.respawnIn > 0) {
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
