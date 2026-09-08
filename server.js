@@ -272,6 +272,7 @@ wss.on('connection', ws => {
   ws.on('message', raw => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
+    if (!m || typeof m !== 'object') return;
     if (m.t === 'create') {
       if (ws.room) return;
       const code = makeCode();
