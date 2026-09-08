@@ -18,11 +18,12 @@ const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2, burstM
 const ROOM    = { maxPlayers: 4, codeLen: 4 };
 
 // 武器表：加武器 = 加一行；射击逻辑只读这张表。range = 子弹最大飞行距离（px）
+// explode = 爆炸半径（0 不爆），explodeDmg = 爆炸 AOE 伤害：飞到射程终点或撞墙时引爆
 const WEAPONS = {
   pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, spread: 0,  pierce: false, size: 3, range: 600 },
   mg:      { rate: 100, dmg: 15, speed: 500, count: 1, spread: 0,  pierce: false, size: 3, range: 500 },
   shotgun: { rate: 600, dmg: 15, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400 },
-  cannon:  { rate: 800, dmg: 60, speed: 300, count: 1, spread: 0,  pierce: true,  size: 8, range: 1100 },
+  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, spread: 0,  pierce: true,  size: 8, range: 640, explode: 80, explodeDmg: 40 },
 };
 
 const COLORS = ['#4a9eff', '#ff9f43', '#2ecc71', '#e84393'];
@@ -95,6 +96,7 @@ function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner) {
       x, y,
       vx: Math.cos(a) * w.speed, vy: Math.sin(a) * w.speed,
       dmg: w.dmg, size: w.size, pierce: w.pierce, owner, range: w.range,
+      explode: w.explode || 0, explodeDmg: w.explodeDmg || 0,
     });
   }
   return bullets;

@@ -60,7 +60,12 @@ function detect(p0, s) {
     const shooter = s.players.find(p => p.respawnIn === 0 && Math.hypot(p.x - b.x, p.y - b.y) < G.PLAYER.r + 14);
     if (shooter) recoil.set(shooter.id, performance.now() + 100);
   }
-  for (const b of gone(p0.bullets, s.bullets)) burst(b.x, b.y, 5, b.boss ? '#ff5252' : '#ffd93d', 120, 0.25, 2); // 命中火花
+  for (const b of gone(p0.bullets, s.bullets)) {
+    if (b.boom) { // 加农炮爆炸：外橙内黄双层
+      burst(b.x, b.y, 30, '#ff9800', 300, 0.6, 5);
+      burst(b.x, b.y, 12, '#ffe082', 160, 0.4, 4);
+    } else burst(b.x, b.y, 5, b.boss ? '#ff5252' : '#ffd93d', 120, 0.25, 2); // 命中火花
+  }
   for (const m of gone(p0.monsters, s.monsters)) burst(m.x, m.y, 14, '#ff7043', 180, 0.5, 3);
   for (const b of gone(p0.bosses, s.bosses)) burst(b.x, b.y, 40, '#b06ce0', 260, 0.8, 5);    // Boss 大紫爆
   for (const pk of gone(p0.pickups, s.pickups)) burst(pk.x, pk.y, 10, '#ffd700', 150, 0.4, 3);
@@ -331,7 +336,7 @@ function statusBar(me) {
   const w = G.WEAPONS[me.weapon];
   if (w) {
     ctx.font = '12px sans-serif'; ctx.fillStyle = '#999';
-    ctx.fillText(`伤害 ${w.dmg}${w.count > 1 ? '×' + w.count : ''} · 射程 ${w.range}${w.pierce ? ' · 穿透' : ''}`,
+    ctx.fillText(`伤害 ${w.dmg}${w.count > 1 ? '×' + w.count : ''} · 射程 ${w.range}${w.pierce ? ' · 穿透' : ''}${w.explode ? ` · 爆炸 ${w.explodeDmg}` : ''}`,
       tx + nameW + 10, y + 25);
   }
   ctx.font = '13px sans-serif'; ctx.fillStyle = '#ccc';

@@ -109,9 +109,12 @@ function tick(room) {
     }
   }
 
-  // 2. 子弹：推进 + 命中
+  // 2. 子弹：推进 + 命中（爆炸弹在射程耗尽/撞墙处引爆）
   room.bullets = room.bullets.filter(b => {
-    if (!G.bulletStep(b, dt, G.WALLS)) return false;
+    if (!G.bulletStep(b, dt, G.WALLS)) {
+      if (b.explode) boom(room, b, now);
+      return false;
+    }
     // 命中玩家（不打自己、不打死人）
     for (const p of room.players.values()) {
       if (p.id === b.owner || p.deadUntil) continue;
@@ -138,14 +141,7 @@ function tick(room) {
           if (b.hitIds.includes(tag)) continue;
           b.hitIds.push(tag);
         }
-        m.hp -= b.dmg;
-        if (m.hp <= 0) {
-          list.splice(i, 1);
-          const killer = room.players.get(b.owner);
-          if (killer) killer.kills++;
-          // Boss 掉落它手里那把武器（争夺点）
-          if (isBoss) room.pickups.push({ id: ++eid, x: m.x, y: m.y, weapon: m.weapon });
-        }
+        damageMonster(room, list, i, b.dmg, isBoss, b.owner);
         if (!b.pierce) return false;
       }
     }
@@ -259,6 +255,33 @@ function damagePlayer(room, p, dmg, attackerId, now, src) {
   p.weapon = 'pistol';
 }
 
+// 对怪物/Boss 结算伤害；死亡则移出数组、记击杀、Boss 掉落所持武器（争夺点）
+function damageMonster(room, list, i, dmg, isBoss, killerId) {
+  const m = list[i];
+  m.hp -= dmg;
+  if (m.hp > 0) return;
+  list.splice(i, 1);
+  const killer = room.players.get(killerId);
+  if (killer) killer.kills++;
+  if (isBoss) room.pickups.push({ id: ++eid, x: m.x, y: m.y, weapon: m.weapon });
+}
+
+// 爆炸弹引爆：AOE 伤玩家（不伤射手/死人，沿爆心→玩家击退）；Boss 弹只炸玩家，不炸怪/其他 Boss
+function boom(room, b, now) {
+  for (const p of room.players.values()) {
+    if (p.id === b.owner || p.deadUntil) continue;
+    if (G.dist(b.x, b.y, p.x, p.y) > b.explode + G.PLAYER.r) continue;
+    damagePlayer(room, p, b.explodeDmg, b.owner, now, b);
+  }
+  if (b.boss) return;
+  for (const [list, r, isBoss] of [[room.monsters, G.MONSTER.r, false], [room.bosses, G.BOSS.r, true]]) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      if (G.dist(b.x, b.y, list[i].x, list[i].y) > b.explode + r) continue;
+      damageMonster(room, list, i, b.explodeDmg, isBoss, b.owner);
+    }
+  }
+}
+
 function dropWeapon() {
   const names = Object.keys(G.WEAPONS).filter(w => w !== 'pistol');
   return names[Math.floor(Math.random() * names.length)];
@@ -298,7 +321,7 @@ function broadcastState(room, now) {
     // 实体带 id：客户端按 id 匹配前后帧做插值与死亡/消失特效
     monsters: room.monsters.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y) })),
     bosses: room.bosses.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp), weapon: b.weapon })),
-    bullets: room.bullets.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss })),
+    bullets: room.bullets.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss, boom: !!b.explode })),
     pickups: room.pickups.map(pk => ({ id: pk.id, x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon })),
   });
   for (const p of room.players.values()) if (p.ws.readyState === 1) p.ws.send(msg);
