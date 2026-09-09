@@ -46,6 +46,7 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
 
 let prev = null, recvTime = 0;   // 插值：实体画在 prev 与 state 之间
 let parts = [];                  // 粒子（世界坐标，纯客户端特效，上限 300）
+let rings = [];                  // 爆炸冲击波圈（半径 = 服务器广播的实际伤害半径）
 let lastFrame = performance.now();
 let shake = 0, flash = 0;        // 自己受击反馈：屏幕震动 / 红闪
 const recoil = new Map();        // 玩家id → 后坐截止时刻（新子弹在谁身边冒出谁后坐）
@@ -61,7 +62,8 @@ function detect(p0, s) {
     if (shooter) recoil.set(shooter.id, performance.now() + 100);
   }
   for (const b of gone(p0.bullets, s.bullets)) {
-    if (b.boom) { // 加农炮爆炸：外橙内黄双层
+    if (b.boom) { // 加农炮爆炸：冲击波圈扩散到真实伤害半径（b.boom = 半径）+ 外橙内黄双层粒子
+      rings.push({ x: b.x, y: b.y, r: b.boom, life: 0.35, max: 0.35 });
       burst(b.x, b.y, 30, '#ff9800', 300, 0.6, 5);
       burst(b.x, b.y, 12, '#ffe082', 160, 0.4, 4);
     } else burst(b.x, b.y, 5, b.boss ? '#ff5252' : '#ffd93d', 120, 0.25, 2); // 命中火花
@@ -255,6 +257,18 @@ function render() {
     ctx.fillStyle = '#eee'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(p0.name, p.x, p.y - G.PLAYER.r - 16);
     bar(p.x, p.y - G.PLAYER.r - 10, 32, p0.hp / G.PLAYER.hpMax);
+  }
+  // 爆炸冲击波圈：橙环扩散到真实伤害半径 + 内部火光填充，随扩散淡出
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const g = rings[i];
+    g.life -= dt;
+    if (g.life <= 0) { rings.splice(i, 1); continue; }
+    const k = 1 - g.life / g.max; // 0→1 扩散进度
+    ctx.globalAlpha = 1 - k;
+    ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(g.x, g.y, g.r * k, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = (1 - k) * 0.22; ctx.fillStyle = '#ffb74d';
+    ctx.beginPath(); ctx.arc(g.x, g.y, g.r * k, 0, Math.PI * 2); ctx.fill();
   }
   // 粒子（世界坐标：阻尼 + 淡出缩小）
   for (let i = parts.length - 1; i >= 0; i--) {
