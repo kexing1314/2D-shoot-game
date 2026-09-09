@@ -340,6 +340,11 @@ function statusBar(me) {
   ctx.fillRect(hx, hy, hw * frac, hh);
   ctx.fillStyle = '#fff'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(`${me.hp} / ${G.PLAYER.hpMax}`, hx + hw / 2, hy + 14);
+  // 换弹中：血条上方黄色闪烁小字（纯视觉，服务器 authoritative）
+  if (me.reloading && Math.sin(performance.now() / 120) > 0) {
+    ctx.fillStyle = '#ffd700';
+    ctx.fillText('换弹中…', hx + hw / 2, y - 6);
+  }
   // 武器名 + 详情（伤害/射程/穿透，数值直接读武器表，加武器零改动）
   const tx = hx + hw + 20;
   ctx.textAlign = 'left';
@@ -354,13 +359,7 @@ function statusBar(me) {
       tx + nameW + 10, y + 25);
   }
   ctx.font = '13px sans-serif'; ctx.fillStyle = '#ccc';
-  const line2 = `击杀 ${me.kills} · 死亡 ${me.deaths} · 弹药 ${me.ammo}/${w ? w.mag : '?'}`;
-  ctx.fillText(line2, tx, y + 44);
-  // 换弹中：黄字闪烁提示（纯视觉，服务器 authoritative）
-  if (me.reloading && Math.sin(performance.now() / 120) > 0) {
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText('换弹中…', tx + ctx.measureText(line2).width + 10, y + 44);
-  }
+  ctx.fillText(`击杀 ${me.kills} · 死亡 ${me.deaths} · 弹药 ${me.ammo}/${w ? w.mag : '?'}`, tx, y + 44);
 }
 
 function drawHUD(me) {
