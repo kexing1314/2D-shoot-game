@@ -29,9 +29,9 @@ for (const [name, wp] of Object.entries(G.WEAPONS)) {
   }
   assert.ok(wp.mag > 0 && wp.reloadMs > 0, `武器 ${name} 弹匣/换弹时长须为正`);
 }
-// 换弹数值：手枪 12发/1s、机枪 40/1.8s、霰弹 5/1.5s、加农 2/2s
+// 换弹数值：手枪 12发/1.5s、机枪 40/2.6s、霰弹 5/2.2s、加农 2/3s
 assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
-  [[12, 1000], [40, 1800], [5, 1500], [2, 2000]]);
+  [[12, 1500], [40, 2600], [5, 2200], [2, 3000]]);
 
 // —— Task 2: 几何与移动 ——
 assert.equal(G.dist(0, 0, 3, 4), 5);

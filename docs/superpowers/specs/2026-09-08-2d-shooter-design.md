@@ -68,10 +68,10 @@ game/
 
 ```js
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, pierce: false, size: 3, range: 600, mag: 12, reloadMs: 1000 },
-  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, pierce: false, size: 3, range: 500, mag: 40, reloadMs: 1800 },
-  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400, mag: 5, reloadMs: 1500 },
-  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, pierce: true,  size: 8, range: 640, explode: 160, explodeDmg: 40, mag: 2, reloadMs: 2000 },
+  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, pierce: false, size: 3, range: 600, mag: 12, reloadMs: 1500 },
+  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, pierce: false, size: 3, range: 500, mag: 40, reloadMs: 2600 },
+  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400, mag: 5, reloadMs: 2200 },
+  cannon:  { rate: 800, dmg: 80, speed: 300, count: 1, pierce: true,  size: 8, range: 640, explode: 160, explodeDmg: 40, mag: 2, reloadMs: 3000 },
 }
 ```
 
