@@ -257,6 +257,11 @@ function render() {
     ctx.fillStyle = '#eee'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(p0.name, p.x, p.y - G.PLAYER.r - 16);
     bar(p.x, p.y - G.PLAYER.r - 10, 32, p0.hp / G.PLAYER.hpMax);
+    // 自己换弹中：头顶黄字闪烁提示
+    if (p0.id === myId && p0.reloading && Math.sin(t / 120) > 0) {
+      ctx.fillStyle = '#ffd700';
+      ctx.fillText('换弹中…', p.x, p.y - G.PLAYER.r - 24);
+    }
   }
   // 爆炸冲击波圈：橙环扩散到真实伤害半径 + 内部火光填充，随扩散淡出
   for (let i = rings.length - 1; i >= 0; i--) {
@@ -340,11 +345,6 @@ function statusBar(me) {
   ctx.fillRect(hx, hy, hw * frac, hh);
   ctx.fillStyle = '#fff'; ctx.font = '13px sans-serif'; ctx.textAlign = 'center';
   ctx.fillText(`${me.hp} / ${G.PLAYER.hpMax}`, hx + hw / 2, hy + 14);
-  // 换弹中：血条上方黄色闪烁小字（纯视觉，服务器 authoritative）
-  if (me.reloading && Math.sin(performance.now() / 120) > 0) {
-    ctx.fillStyle = '#ffd700';
-    ctx.fillText('换弹中…', hx + hw / 2, y - 6);
-  }
   // 武器名 + 详情（伤害/射程/穿透，数值直接读武器表，加武器零改动）
   const tx = hx + hw + 20;
   ctx.textAlign = 'left';
