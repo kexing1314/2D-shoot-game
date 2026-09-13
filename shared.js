@@ -6,7 +6,7 @@
 })(typeof self !== 'undefined' ? self : this, function () {
 
 const MAP = { w: 3200, h: 1800 };
-const TICK_MS = 50;
+const TICK_MS = 33; // 30 tick/s：云端联机降体感延迟（按键等待+插值落后各 ~1/3 缩短）
 
 // fireStunMs = 受伤后停火硬直；knockback = 每次受击被推开的距离(px)
 // panic* = 低血肾上腺素：HP 低于 panicBelow 时每次受伤提速 panicMul 倍，持续 panicMs（再受伤刷新时长）

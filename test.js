@@ -6,7 +6,7 @@ const G = require('./shared.js');
 // 点 (px,py) 距矩形边缘是否小于 d
 const near = (px, py, w, d) => px + d > w.x && px - d < w.x + w.w && py + d > w.y && py - d < w.y + w.h;
 
-assert.equal(G.TICK_MS, 50);
+assert.equal(G.TICK_MS, 33);
 assert.ok(G.COLORS.length >= G.ROOM.maxPlayers, '颜色数须不少于最大玩家数');
 
 for (const w of G.WALLS) {

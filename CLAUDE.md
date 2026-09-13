@@ -5,7 +5,7 @@
 
 ## 文件与职责
 - `shared.js` — **所有游戏数值的唯一来源**（武器表/玩家/怪物/Boss/地图墙/刷新点），UMD 双端共享；调手感只改这个文件。含纯逻辑函数（fireDir/weaponFire/bulletStep/moveWithWalls 等）
-- `server.js` — HTTP 静态托管 + WebSocket + 房间管理 + 20 tick/s 权威模拟（移动/射击/碰撞/刷怪/Boss AI/广播全量 state 带实体 id）
+- `server.js` — HTTP 静态托管 + WebSocket + 房间管理 + 30 tick/s 权威模拟（移动/射击/碰撞/刷怪/Boss AI/广播全量 state 带实体 id）
 - `public/client.js` — 按键采集（变化才发）、按 id 匹配前后帧插值（60fps 平滑）、状态 diff 推测事件放粒子、HUD（状态栏/计分板/雷达小地图）
 - `public/index.html` — 大厅 + canvas 页
 - `test.js` — 纯 assert 测试，`node test.js` 直接跑，无框架
