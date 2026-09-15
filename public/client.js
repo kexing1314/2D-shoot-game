@@ -50,6 +50,17 @@ let rings = [];                  // 爆炸冲击波圈（半径 = 服务器广�
 let lastFrame = performance.now();
 let shake = 0, flash = 0;        // 自己受击反馈：屏幕震动 / 红闪
 const recoil = new Map();        // 玩家id → 后坐截止时刻（新子弹在谁身边冒出谁后坐）
+const aimAngle = new Map();      // 玩家id → 最后瞄准角（face 优先，静止时保持）
+
+// —— 人物精灵（Kenney Top-down Shooter，CC0；纯俯视，旋转即任意朝向）——
+// 槽位 = COLORS 下标；姿势：hold 待命 / gun 手枪 / machine 长枪 / reload 换弹
+const SPR = {};
+for (let c = 0; c < 4; c++) for (const pose of ['hold', 'gun', 'machine', 'reload']) {
+  const im = new Image();
+  im.src = 'assets/char' + c + '_' + pose + '.png';
+  SPR[c + '_' + pose] = im;
+}
+const POSE_BY_WEAPON = { pistol: 'gun', mg: 'machine', shotgun: 'machine', cannon: 'machine' };
 
 // 状态 diff → 推测事件放粒子（子弹消失≈命中/撞墙，客户端不区分，火花一样小）
 function detect(p0, s) {
@@ -218,38 +229,52 @@ function render() {
     ctx.globalAlpha = 1;
     circ(b.x, b.y, b0.size);
   }
-  // 玩家（渐变球 + 光晕 + 昵称 + 血条；自己描白边；死亡中不画）
+  // 玩家（CC0 俯视精灵小人：朝 aim 角旋转、姿势随武器/换弹切换；地面色环辨识队伍；死亡中不画）
   for (const p0 of state.players) {
     if (p0.respawnIn > 0) continue;
     const p = lp(p0, maps.players);
-    if (!inView(p.x, p.y, G.PLAYER.r + 24)) continue;
-    ctx.globalAlpha = 0.18; ctx.fillStyle = p0.color;
-    circ(p.x, p.y, G.PLAYER.r * 1.7);
+    if (!inView(p.x, p.y, G.PLAYER.r + 40)) continue;
+    // 瞄准角：服务器 face 优先，否则客户端按插值位移推移动方向，静止保持
+    const oPrev = maps.players && maps.players.get(p0.id);
+    let ang = aimAngle.get(p0.id) || 0;
+    if (p0.face) ang = Math.atan2(p0.face.y, p0.face.x);
+    else if (oPrev && Math.abs(p.x - oPrev.x) + Math.abs(p.y - oPrev.y) > 0.3)
+      ang = Math.atan2(p.y - oPrev.y, p.x - oPrev.x);
+    aimAngle.set(p0.id, ang);
+    // 地面投影 + 队伍色环（精灵本身不带队伍色，靠色环/昵称/小地图辨识）
+    ctx.globalAlpha = 0.3; ctx.fillStyle = p0.color;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 6, 20, 12, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 6, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
-    // 低血加速：蓝色残影（上一帧+中间位置）+ 脉冲圆环
+    // 低血加速：脉冲圆环
     if (p0.boost) {
-      const o = maps.players && maps.players.get(p0.id);
-      ctx.globalAlpha = 0.2; ctx.fillStyle = '#4dd0e1';
-      if (o) circ(o.x, o.y, G.PLAYER.r * 0.9);
-      circ(o ? (o.x + p.x) / 2 : p.x, o ? (o.y + p.y) / 2 : p.y, G.PLAYER.r * 0.7);
       ctx.globalAlpha = 0.5 + 0.2 * Math.sin(t / 100);
       ctx.strokeStyle = '#4dd0e1'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(p.x, p.y, G.PLAYER.r + 4, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    // 炮管（朝向来自服务器开火记录）+ 后坐 2px（100ms 回弹）
-    if (p0.face) {
-      const rec = (recoil.get(p0.id) || 0) > t ? 2 : 0;
-      ctx.strokeStyle = '#cfd8e3'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(p.x + p0.face.x * 6, p.y + p0.face.y * 6);
-      ctx.lineTo(p.x + p0.face.x * (G.PLAYER.r + 6 - rec), p.y + p0.face.y * (G.PLAYER.r + 6 - rec));
-      ctx.stroke();
+    const slot = Math.max(0, G.COLORS.indexOf(p0.color));
+    const pose = p0.reloading ? 'reload' : (p0.face ? (POSE_BY_WEAPON[p0.weapon] || 'gun') : 'hold');
+    const img = SPR[slot + '_' + pose];
+    if (img && img.complete && img.width) {
+      const rec = (recoil.get(p0.id) || 0) > t ? 3 : 0;          // 后坐：沿瞄准反方向退 3px
+      const moving = oPrev && Math.abs(p.x - oPrev.x) + Math.abs(p.y - oPrev.y) > 0.3;
+      const bob = moving ? Math.sin(t / 70) * 1.5 : 0;           // 走路颠簸（素材无走路帧，用它代步态）
+      ctx.save();
+      ctx.translate(p.x + Math.cos(ang) * (bob - rec), p.y + Math.sin(ang) * (bob - rec));
+      ctx.rotate(ang);
+      ctx.imageSmoothingEnabled = false;                          // 像素风保持锐利
+      const S = 1.25;
+      ctx.drawImage(img, -img.width * S / 2, -img.height * S / 2, img.width * S, img.height * S);
+      ctx.restore();
+      ctx.imageSmoothingEnabled = true;
+    } else { // 精灵未加载完的回退：旧渐变球
+      const gr = ctx.createRadialGradient(p.x - 5, p.y - 5, 2, p.x, p.y, G.PLAYER.r);
+      gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, p0.color);
+      ctx.fillStyle = gr;
+      circ(p.x, p.y, G.PLAYER.r);
     }
-    const gr = ctx.createRadialGradient(p.x - 5, p.y - 5, 2, p.x, p.y, G.PLAYER.r);
-    gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, p0.color);
-    ctx.fillStyle = gr;
-    circ(p.x, p.y, G.PLAYER.r);
     if (p0.id === myId) {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(p.x, p.y, G.PLAYER.r, 0, Math.PI * 2); ctx.stroke();
