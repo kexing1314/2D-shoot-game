@@ -361,11 +361,13 @@ function damageMonster(room, list, i, dmg, isBoss, killerId) {
 
 // 爆炸弹引爆：AOE 伤玩家（不伤射手/死人，沿爆心→玩家击退）；Boss 弹只炸玩家，不炸怪/其他 Boss
 function boom(room, b, now) {
-  // 合作模式：玩家火箭不伤队友，仅 Boss 爆炸打玩家
+  // 合作模式：玩家火箭不伤队友，仅 Boss 爆炸打玩家；击退统一沿子弹射击方向
+  const bl = Math.hypot(b.vx, b.vy) || 1;
+  const kd = { x: b.vx / bl, y: b.vy / bl };
   if (b.boss) for (const p of room.players.values()) {
     if (p.id === b.owner || p.deadUntil) continue;
     if (G.dist(b.x, b.y, p.x, p.y) > b.explode + G.PLAYER.r) continue;
-    damagePlayer(room, p, b.explodeDmg, b.owner, now, b);
+    damagePlayer(room, p, b.explodeDmg, b.owner, now, b, kd);
   }
   if (b.boss) return;
   for (const [list, r, isBoss] of [[room.monsters, G.MONSTER.r, false], [room.bosses, G.BOSS.r, true]]) {
