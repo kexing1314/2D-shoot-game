@@ -60,7 +60,7 @@ assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
   assert.equal(G.waveBossXp(1), 100);
   // 等级倍率进 weaponFire：弹速/伤害乘上、冷却按 rateMul 缩
   const bs = G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1', { rateMul: 0.5, speedMul: 2, dmgMul: 2 });
-  assert.equal(bs[0].vx, 1000);
+  assert.equal(bs[0].vx, 3000); // 1500×2 等级弹速
   assert.equal(bs[0].dmg, 50);
   assert.equal(G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 9100, 9000, 'p1', { rateMul: 0.5 }), null); // 150ms 冷却未到
 }
@@ -128,7 +128,7 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   const bs = G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 1000, 0, 'p1');
   assert.equal(bs.length, 1);
   assert.deepEqual({ dmg: bs[0].dmg, vx: bs[0].vx, vy: bs[0].vy, owner: bs[0].owner, pierce: bs[0].pierce, range: bs[0].range },
-    { dmg: 25, vx: 500, vy: 0, owner: 'p1', pierce: 1, range: 600 });
+    { dmg: 25, vx: 1500, vy: 0, owner: 'p1', pierce: 1, range: 600 });
   // 冷却未到（200ms < 300ms）→ null
   assert.equal(G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 1200, 1000, 'p1'), null);
   // 未知武器 / 非法方向（null、零向量）→ null
@@ -140,8 +140,8 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   // 斜向射击：45° 方向 vx=vy（速度 500/√2）
   const d = { x: Math.SQRT1_2, y: Math.SQRT1_2 };
   const bs = G.weaponFire('pistol', 0, 0, d, 9e9, 0, 'p1');
-  assert.ok(Math.abs(bs[0].vx - 500 * Math.SQRT1_2) < 1e-9);
-  assert.ok(Math.abs(bs[0].vy - 500 * Math.SQRT1_2) < 1e-9);
+  assert.ok(Math.abs(bs[0].vx - 1500 * Math.SQRT1_2) < 1e-9);
+  assert.ok(Math.abs(bs[0].vy - 1500 * Math.SQRT1_2) < 1e-9);
 }
 {
   // 霰弹 5 颗扇形：朝 right 时 vy 依次 <0 / <0 / =0 / >0 / >0
@@ -163,7 +163,7 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   const cn = G.weaponFire('rocket', 0, 0, { x: -1, y: 0 }, 9000, 0, 'p1');
   assert.equal(cn[0].pierce, 0);
   assert.equal(cn[0].maxHits, 1);
-  assert.equal(cn[0].vx, -350);
+  assert.equal(cn[0].vx, -1050);
   assert.equal(cn[0].size, 8);
   assert.equal(cn[0].dmg, 30);
   assert.equal(cn[0].range, 700);

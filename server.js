@@ -121,46 +121,53 @@ function tick(room) {
     }
   }
 
-  // 2. 子弹：推进 + 命中（爆炸弹在射程耗尽/撞墙处引爆）
+  // 2. 子弹：子步进推进（高速弹每 tick 拆 ≤12px 小步，防穿模漏判）+ 命中（爆炸弹命中/撞墙/终点引爆）
   room.bullets = room.bullets.filter(b => {
-    if (!G.bulletStep(b, dt, room.view)) {
-      if (b.explode) boom(room, b, now);
-      return false;
-    }
-    // 命中玩家：仅 Boss 子弹打玩家（合作模式：玩家子弹穿过队友）；穿透至 maxHits 个目标后消失
-    if (b.boss) for (const p of room.players.values()) {
-      if (p.id === b.owner || p.deadUntil) continue;
-      if (G.dist(b.x, b.y, p.x, p.y) >= G.PLAYER.r + b.size) continue;
-      b.hitIds = b.hitIds || [];
-      if (b.hitIds.includes(p.id)) continue;
-      b.hitIds.push(p.id);
-      const bl = Math.hypot(b.vx, b.vy) || 1;
-      damagePlayer(room, p, b.dmg, b.owner, now, b, { x: b.vx / bl, y: b.vy / bl }); // 击退沿弹速向量
-      if (b.explode) { boom(room, b, now); return false; } // 爆炸弹命中即爆（直击伤 + AOE 叠加）
-      if (b.hitIds.length >= (b.maxHits || 1)) return false;
-    }
-    if (b.boss) return true; // Boss 子弹只打玩家，不打怪/其他 Boss
-    // 命中怪物 / Boss
-    for (const [list, r, isBoss] of [[room.monsters, G.MONSTER.r, false], [room.bosses, G.BOSS.r, true]]) {
-      for (let i = list.length - 1; i >= 0; i--) {
-        const m = list[i];
-        if (G.dist(b.x, b.y, m.x, m.y) >= r + b.size) continue;
-        const tag = (isBoss ? 'b' : 'm') + m.id;
-        b.hitIds = b.hitIds || [];
-        if (b.hitIds.includes(tag)) continue;
-        b.hitIds.push(tag);
-        damageMonster(room, list, i, b.dmg, isBoss, b.owner);
-        if (m.hp > 0) { // 命中未死：击退 + 僵持（玩家打怪同样的控制，可风筝）
-          const kb = isBoss ? G.BOSS.knockback : G.MONSTER.knockback;
-          const r = isBoss ? G.BOSS.r : G.MONSTER.r;
-          const dd = G.dist(b.x, b.y, m.x, m.y) || 1;
-          const mk = G.moveWithWalls(m.x, m.y, (m.x - b.x) / dd * kb, (m.y - b.y) / dd * kb, r, room.walls);
-          m.x = mk.x; m.y = mk.y;
-          m.stunUntil = now + (isBoss ? G.BOSS.stunMs : G.MONSTER.stunMs);
-        }
-        if (b.explode) { boom(room, b, now); return false; }
-        if (b.hitIds.length >= (b.maxHits || 1)) return false; // 穿透额度用完
+    const steps = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy) * dt / 12));
+    for (let s = 0; s < steps; s++) {
+      if (!G.bulletStep(b, dt / steps, room.view)) {
+        if (b.explode) boom(room, b, now);
+        return false;
       }
+      let dead = false;
+      // 命中玩家：仅 Boss 子弹打玩家（合作模式：玩家子弹穿过队友）；穿透至 maxHits 个目标后消失
+      if (b.boss) for (const p of room.players.values()) {
+        if (p.id === b.owner || p.deadUntil) continue;
+        if (G.dist(b.x, b.y, p.x, p.y) >= G.PLAYER.r + b.size) continue;
+        b.hitIds = b.hitIds || [];
+        if (b.hitIds.includes(p.id)) continue;
+        b.hitIds.push(p.id);
+        const bl = Math.hypot(b.vx, b.vy) || 1;
+        damagePlayer(room, p, b.dmg, b.owner, now, b, { x: b.vx / bl, y: b.vy / bl }); // 击退沿弹速向量
+        if (b.explode) { boom(room, b, now); return false; } // 爆炸弹命中即爆（直击伤 + AOE 叠加）
+        if (b.hitIds.length >= (b.maxHits || 1)) { dead = true; break; }
+      }
+      if (dead) return false;
+      if (b.boss) continue; // Boss 子弹只打玩家，不打怪/其他 Boss（继续子步进）
+      // 命中怪物 / Boss
+      for (const [list, r, isBoss] of [[room.monsters, G.MONSTER.r, false], [room.bosses, G.BOSS.r, true]]) {
+        for (let i = list.length - 1; i >= 0; i--) {
+          const m = list[i];
+          if (G.dist(b.x, b.y, m.x, m.y) >= r + b.size) continue;
+          const tag = (isBoss ? 'b' : 'm') + m.id;
+          b.hitIds = b.hitIds || [];
+          if (b.hitIds.includes(tag)) continue;
+          b.hitIds.push(tag);
+          damageMonster(room, list, i, b.dmg, isBoss, b.owner);
+          if (m.hp > 0) { // 命中未死：击退 + 僵持（玩家打怪同样的控制，可风筝）
+            const kb = isBoss ? G.BOSS.knockback : G.MONSTER.knockback;
+            const mr = isBoss ? G.BOSS.r : G.MONSTER.r;
+            const dd = G.dist(b.x, b.y, m.x, m.y) || 1;
+            const mk = G.moveWithWalls(m.x, m.y, (m.x - b.x) / dd * kb, (m.y - b.y) / dd * kb, mr, room.walls);
+            m.x = mk.x; m.y = mk.y;
+            m.stunUntil = now + (isBoss ? G.BOSS.stunMs : G.MONSTER.stunMs);
+          }
+          if (b.explode) { boom(room, b, now); return false; }
+          if (b.hitIds.length >= (b.maxHits || 1)) { dead = true; break; } // 穿透额度用完
+        }
+        if (dead) break;
+      }
+      if (dead) return false;
     }
     return true;
   });
