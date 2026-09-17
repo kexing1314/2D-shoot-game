@@ -31,6 +31,7 @@ function go(msg) {
 function startGame(m) {
   myId = m.id;
   roomCode = m.code;
+  for (const k of Object.keys(keys)) keys[k] = false; // 清大厅输入残留键位，进房不乱走
   curMapKey = G.MAPS[m.map] ? m.map : G.DEFAULT_MAP; // 房主选的图，joined 带回
   curMap = G.MAPS[curMapKey];
   $('lobby').style.display = 'none';
@@ -697,13 +698,17 @@ const KEYMAP = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd', KeyR: 'r',
 function sendInput() {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'input', keys }));
 }
+// 焦点在输入框时游戏监听完全让路——否则 preventDefault 会吃掉房间码/昵称里的 WASD/R 等键
+const inField = e => e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA');
 addEventListener('keydown', e => {
+  if (inField(e)) return;
   const k = KEYMAP[e.code];
   if (!k) return;
   e.preventDefault(); // 方向键不滚页面
   if (!keys[k]) { keys[k] = true; sendInput(); }
 });
 addEventListener('keyup', e => {
+  if (inField(e)) return;
   const k = KEYMAP[e.code];
   if (!k) return;
   if (keys[k]) { keys[k] = false; sendInput(); }
