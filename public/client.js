@@ -121,7 +121,22 @@ let rings = [];                  // 爆炸冲击波圈（半径 = 服务器广�
 let lastFrame = performance.now();
 let shake = 0, flash = 0;        // 自己受击反馈：屏幕震动 / 红闪
 const recoil = new Map();        // 玩家id → 后坐截止时刻（新子弹在谁身边冒出谁后坐）
-const aimAngle = new Map();      // 玩家id → 最后瞄准角（face 优先，静止时保持）
+const aimAngle = new Map();      // 实体id → 平滑后的朝向角
+
+// 朝向平滑：最短弧逼近目标角。逐帧位移差只有 ~1px 且带取整噪声，
+// 直接 atan2 会每帧乱跳（敌人转向时尤其明显），渐变转向顺带消抖
+function turnToward(cur, tgt, k) {
+  let d = tgt - cur;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return cur + d * k;
+}
+// 目标朝向：有稳定来源用稳定来源，否则位移差推算（阈值过滤静止噪声），都没有 = null 保持原角
+function targetAngle(stable, o, x, y, threshold) {
+  if (stable) return Math.atan2(stable.y, stable.x);
+  if (o && Math.abs(x - o.x) + Math.abs(y - o.y) > threshold) return Math.atan2(y - o.y, x - o.x);
+  return null;
+}
 
 // —— 人物精灵（Kenney Top-down Shooter，CC0；纯俯视，旋转即任意朝向）——
 // 槽位 = COLORS 下标；姿势：hold 待命 / gun 手枪 / machine 长枪 / reload 换弹
@@ -273,9 +288,10 @@ function render() {
     const m = lp(m0, maps.monsters);
     if (!inView(m.x, m.y, G.MONSTER.r + 24)) continue;
     const o = maps.monsters && maps.monsters.get(m0.id);
-    const moving = o && Math.abs(m.x - o.x) + Math.abs(m.y - o.y) > 0.2;
-    let ang = aimAngle.get('m' + m0.id) || 0;
-    if (moving) ang = Math.atan2(m.y - o.y, m.x - o.x);
+    const moving = o && Math.abs(m.x - o.x) + Math.abs(m.y - o.y) > 0.4;
+    const tgt = moving ? Math.atan2(m.y - o.y, m.x - o.x) : null;
+    const ang = tgt === null ? (aimAngle.get('m' + m0.id) || 0)
+      : turnToward(aimAngle.get('m' + m0.id) || 0, tgt, 0.25);
     aimAngle.set('m' + m0.id, ang);
     ctx.globalAlpha = 0.3; ctx.fillStyle = '#ff5252';
     ctx.beginPath(); ctx.ellipse(m.x, m.y + 4, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
@@ -301,9 +317,10 @@ function render() {
     const b = lp(b0, maps.bosses);
     if (!inView(b.x, b.y, G.BOSS.r + 32)) continue;
     const o = maps.bosses && maps.bosses.get(b0.id);
-    const moving = o && Math.abs(b.x - o.x) + Math.abs(b.y - o.y) > 0.2;
-    let ang = aimAngle.get('b' + b0.id) || 0;
-    if (moving) ang = Math.atan2(b.y - o.y, b.x - o.x);
+    const moving = o && Math.abs(b.x - o.x) + Math.abs(b.y - o.y) > 0.4;
+    const tgt = moving ? Math.atan2(b.y - o.y, b.x - o.x) : null;
+    const ang = tgt === null ? (aimAngle.get('b' + b0.id) || 0)
+      : turnToward(aimAngle.get('b' + b0.id) || 0, tgt, 0.25);
     aimAngle.set('b' + b0.id, ang);
     ctx.globalAlpha = 0.25; ctx.fillStyle = '#9b59b6';
     ctx.beginPath(); ctx.ellipse(b.x, b.y + 8, 36, 22, 0, 0, Math.PI * 2); ctx.fill();
@@ -348,12 +365,11 @@ function render() {
     if (p0.respawnIn > 0) continue;
     const p = lp(p0, maps.players);
     if (!inView(p.x, p.y, G.PLAYER.r + 40)) continue;
-    // 瞄准角：服务器 face 优先，否则客户端按插值位移推移动方向，静止保持
+    // 瞄准角：服务器 face（稳定）优先，否则位移差推算；最短弧平滑消抖
     const oPrev = maps.players && maps.players.get(p0.id);
-    let ang = aimAngle.get(p0.id) || 0;
-    if (p0.face) ang = Math.atan2(p0.face.y, p0.face.x);
-    else if (oPrev && Math.abs(p.x - oPrev.x) + Math.abs(p.y - oPrev.y) > 0.3)
-      ang = Math.atan2(p.y - oPrev.y, p.x - oPrev.x);
+    const tgt = targetAngle(p0.face, oPrev, p.x, p.y, 0.4);
+    const ang = tgt === null ? (aimAngle.get(p0.id) || 0)
+      : turnToward(aimAngle.get(p0.id) || 0, tgt, p0.face ? 0.5 : 0.25);
     aimAngle.set(p0.id, ang);
     // 地面投影 + 队伍色环（精灵本身不带队伍色，靠色环/昵称/小地图辨识）
     ctx.globalAlpha = 0.3; ctx.fillStyle = p0.color;
