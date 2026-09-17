@@ -135,6 +135,7 @@ function tick(room) {
         damagePlayer(room, p, b.dmg, b.owner, now, b);
       } else {
         damagePlayer(room, p, b.dmg, b.owner, now, b);
+        if (b.explode) boom(room, b, now); // 爆炸弹命中即爆（直击伤 + AOE 叠加）
         return false;
       }
     }
@@ -151,7 +152,10 @@ function tick(room) {
           b.hitIds.push(tag);
         }
         damageMonster(room, list, i, b.dmg, isBoss, b.owner);
-        if (!b.pierce) return false;
+        if (!b.pierce) {
+          if (b.explode) boom(room, b, now);
+          return false;
+        }
       }
     }
     return true;

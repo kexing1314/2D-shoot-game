@@ -171,7 +171,7 @@ for (const k of ['mon_stand', 'boss_hold', 'boss_machine']) {
   im.src = 'assets/' + k + '.png';
   SPR[k] = im;
 }
-const POSE_BY_WEAPON = { pistol: 'gun', mg: 'machine', shotgun: 'machine', cannon: 'machine' };
+const POSE_BY_WEAPON = { pistol: 'gun', mg: 'machine', shotgun: 'machine', rocket: 'machine' };
 
 // 状态 diff → 推测事件放粒子（子弹消失≈命中/撞墙，客户端不区分，火花一样小）
 function detect(p0, s) {
@@ -184,7 +184,7 @@ function detect(p0, s) {
     if (shooter) recoil.set(shooter.id, performance.now() + 100);
   }
   for (const b of gone(p0.bullets, s.bullets)) {
-    if (b.boom) { // 加农炮爆炸：冲击波圈扩散到真实伤害半径（b.boom = 半径）+ 外橙内黄双层粒子
+    if (b.boom) { // 火箭爆炸：冲击波圈扩散到真实伤害半径（b.boom = 半径）+ 外橙内黄双层粒子
       rings.push({ x: b.x, y: b.y, r: b.boom, life: 0.35, max: 0.35 });
       burst(b.x, b.y, 30, '#ff9800', 300, 0.6, 5);
       burst(b.x, b.y, 12, '#ffe082', 160, 0.4, 4);
@@ -541,7 +541,7 @@ function bar(x, y, w, frac) {
 
 // —— HUD ——
 // 加武器时在 WEAPONS 表加数值、这里加一行中文名
-const WEAPON_NAMES = { pistol: '手枪', mg: '机枪', shotgun: '霰弹枪', cannon: '加农炮' };
+const WEAPON_NAMES = { pistol: '手枪', mg: '机枪', shotgun: '霰弹枪', rocket: '火箭筒' };
 
 function statusBar(me) {
   const bw = 620, bh = 54;

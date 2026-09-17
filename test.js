@@ -33,9 +33,9 @@ for (const [name, wp] of Object.entries(G.WEAPONS)) {
   }
   assert.ok(wp.mag > 0 && wp.reloadMs > 0, `武器 ${name} 弹匣/换弹时长须为正`);
 }
-// 换弹数值：手枪 12发/1.5s、机枪 40/2.6s、霰弹 5/2.2s、加农 2/3s
+// 换弹数值：手枪 12发/1.5s、机枪 40/2.6s、霰弹 5/2.2s、火箭 1/3s
 assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
-  [[12, 1500], [40, 2600], [5, 2200], [2, 3000]]);
+  [[12, 1500], [40, 2600], [5, 2200], [1, 3000]]);
 
 // —— Task 2: 几何与移动 ——
 assert.equal(G.dist(0, 0, 3, 4), 5);
@@ -106,15 +106,15 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.ok(sg2.every(b => b.vx > 0));
 }
 {
-  // 重炮：慢速大弹、穿透、射程终点爆炸（直击 80 / 爆炸 40 / 半径 160 / 射程 640 = 横向视野一半）
-  const cn = G.weaponFire('cannon', 0, 0, { x: -1, y: 0 }, 9000, 0, 'p1');
-  assert.equal(cn[0].pierce, true);
-  assert.equal(cn[0].vx, -300);
+  // 火箭筒：慢速大弹、不穿透、命中即爆（直击 30 / 爆炸 50 / 半径 100 / 射程 700）
+  const cn = G.weaponFire('rocket', 0, 0, { x: -1, y: 0 }, 9000, 0, 'p1');
+  assert.equal(cn[0].pierce, false);
+  assert.equal(cn[0].vx, -350);
   assert.equal(cn[0].size, 8);
-  assert.equal(cn[0].dmg, 80);
-  assert.equal(cn[0].range, 640);
-  assert.equal(cn[0].explode, 160);
-  assert.equal(cn[0].explodeDmg, 40);
+  assert.equal(cn[0].dmg, 30);
+  assert.equal(cn[0].range, 700);
+  assert.equal(cn[0].explode, 100);
+  assert.equal(cn[0].explodeDmg, 50);
   // 非爆炸武器 explode = 0
   const ps = G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1');
   assert.equal(ps[0].explode, 0);
