@@ -155,6 +155,14 @@ function tick(room) {
           b.hitIds.push(tag);
         }
         damageMonster(room, list, i, b.dmg, isBoss, b.owner);
+        if (m.hp > 0) { // 命中未死：击退 + 僵持（玩家打怪同样的控制，可风筝）
+          const kb = isBoss ? G.BOSS.knockback : G.MONSTER.knockback;
+          const r = isBoss ? G.BOSS.r : G.MONSTER.r;
+          const dd = G.dist(b.x, b.y, m.x, m.y) || 1;
+          const mk = G.moveWithWalls(m.x, m.y, (m.x - b.x) / dd * kb, (m.y - b.y) / dd * kb, r, room.walls);
+          m.x = mk.x; m.y = mk.y;
+          m.stunUntil = now + (isBoss ? G.BOSS.stunMs : G.MONSTER.stunMs);
+        }
         if (!b.pierce) {
           if (b.explode) boom(room, b, now);
           return false;
@@ -182,7 +190,7 @@ function tick(room) {
   for (const m of room.monsters) {
     const target = nearest(alive, m.x, m.y);
     stepAlongPath(room, m, G.MONSTER.r, target, m.speed || G.MONSTER.speed, dt, now, 500);
-    if (target && now >= m.nextHit && G.dist(m.x, m.y, target.x, target.y) < G.MONSTER.r + G.PLAYER.r) {
+    if (target && now >= m.nextHit && now >= (m.stunUntil || 0) && G.dist(m.x, m.y, target.x, target.y) < G.MONSTER.r + G.PLAYER.r) {
       damagePlayer(room, target, G.MONSTER.dmg, null, now, m);
       m.nextHit = now + G.MONSTER.cooldownMs;
     }
@@ -199,7 +207,7 @@ function tick(room) {
       bs.firing = !bs.firing;
       bs.phaseEnd = now + (bs.firing ? G.BOSS.burstMs : G.BOSS.restMs);
     }
-    if (!bs.firing) continue;
+    if (!bs.firing || now < (bs.stunUntil || 0)) continue; // 僵持期停火
     const dir = { x: (target.x - bs.x) / d, y: (target.y - bs.y) / d };
     const shots = G.weaponFire(bs.weapon, bs.x, bs.y, dir, now, bs.lastFire, null);
     if (shots) {
@@ -254,15 +262,19 @@ function respawn(room, p, now) {
 function damagePlayer(room, p, dmg, attackerId, now, src) {
   if (p.deadUntil) return; // 已死亡玩家不再受伤（防止同tick多怪重复计死亡）
   let d = dmg;
+  const hadShield = p.shield > 0;
   if (p.shield > 0) { const abs = Math.min(p.shield, d); p.shield -= abs; d -= abs; } // 护盾先吸收
+  const shielded = hadShield && p.shield > 0; // 被盾挡下且没碎 → 轻击退/短僵持
+  if (hadShield && p.shield <= 0) p.shieldBrokenAt = now; // 碎盾：回盾冷却改 20s
   p.hp -= d;
   p.lastDamagedAt = now;
-  p.fireStunUntil = now + G.PLAYER.fireStunMs; // 受伤硬直：暂停射击（移动不受影响）
+  p.fireStunUntil = now + (shielded ? G.PLAYER.stunShieldedMs : G.PLAYER.stunMs); // 僵持：暂停射击（移动不受影响）
   if (src) {
-    // 击退：沿 src→玩家 方向推 knockback px，撞墙检测（打不进墙）
+    // 击退：沿 src→玩家 方向推（盾没碎减半），撞墙检测（打不进墙）
+    const kb = shielded ? G.PLAYER.knockbackShielded : G.PLAYER.knockback;
     const d = G.dist(src.x, src.y, p.x, p.y) || 1;
     const m = G.moveWithWalls(p.x, p.y,
-      (p.x - src.x) / d * G.PLAYER.knockback, (p.y - src.y) / d * G.PLAYER.knockback,
+      (p.x - src.x) / d * kb, (p.y - src.y) / d * kb,
       G.PLAYER.r, room.walls);
     p.x = m.x; p.y = m.y;
   }

@@ -7,12 +7,15 @@
 
 const TICK_MS = 33; // 30 tick/s：云端联机降体感延迟（按键等待+插值落后各 ~1/3 缩短）
 
-// fireStunMs = 受伤后停火硬直；knockback = 每次受击被推开的距离(px)
+// 受击僵持（不能攻击，移动不受影响）：无盾/碎盾 stunMs，被盾挡下 stunShieldedMs；击退同档减半
+// shieldBreakRegenMs = 碎盾后不受击多久才开始回盾（未碎的普通回盾走 regenDelayMs）
 // panic* = 低血肾上腺素：HP 低于 panicBelow 时每次受伤提速 panicMul 倍，持续 panicMs（再受伤刷新时长）
-const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000, fireStunMs: 500, knockback: 24,
+const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000,
+  stunMs: 750, stunShieldedMs: 400, knockback: 24, knockbackShielded: 12, shieldBreakRegenMs: 20000,
   panicBelow: 50, panicMul: 1.3, panicMs: 3000 };
 const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000,
-  wallDmgPerSec: 30 }; // 啃可破坏墙每秒伤害
+  wallDmgPerSec: 30, // 啃可破坏墙每秒伤害
+  knockback: 20, stunMs: 750 }; // 被子弹命中的击退/僵持（不能接触攻击）
 const PATH_CELL = 60;  // A* 网格边长（px）
 
 // 波次怪潮：数量/HP/经验全走函数，diff = 难度乘数（将来菜单选项传不同 diff，room 存一个数字）
@@ -35,7 +38,8 @@ const levelMul = level => {
 const shieldMax = level => LEVELS.shieldBase * levelMul(level).shield;
 const xpNeed = level => Math.round(LEVELS.xpBase * Math.pow(level, LEVELS.xpPow));
 // Boss：持枪远程（无碰撞伤害），视野 = 所持武器射程，移速缓慢；攻击节奏 = 开火 burstMs / 停火 restMs 交替
-const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2, burstMs: 3000, restMs: 2000 };
+const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2, burstMs: 3000, restMs: 2000,
+  knockback: 10, stunMs: 750 }; // 体型重击退小；被命中停火僵持
 const ROOM    = { maxPlayers: 4, codeLen: 4 };
 
 // 武器表：加武器 = 加一行；射击逻辑只读这张表。range = 子弹最大飞行距离（px）
@@ -180,12 +184,16 @@ function chaseStep(e, r, target, speed, dtSec, walls) {
   e.x = p.x; e.y = p.y;
 }
 
-// 脱战 regenDelayMs 后回血（regenPerSec/s）+ 回盾（shieldMax/10 每秒，10s 回满），各自封顶
+// 脱战 regenDelayMs 后回血（regenPerSec/s）；回盾（shieldMax/10 每秒）——碎盾后须不受击 shieldBreakRegenMs 才开始
 function regenStep(p, now, dtSec) {
   if (p.deadUntil) return;
-  if (now - p.lastDamagedAt < PLAYER.regenDelayMs) return;
-  if (p.hp < PLAYER.hpMax) p.hp = Math.min(PLAYER.hpMax, p.hp + PLAYER.regenPerSec * dtSec);
-  if (p.shieldMax && p.shield < p.shieldMax) p.shield = Math.min(p.shieldMax, p.shield + p.shieldMax / 10 * dtSec);
+  if (now - p.lastDamagedAt >= PLAYER.regenDelayMs && p.hp < PLAYER.hpMax) {
+    p.hp = Math.min(PLAYER.hpMax, p.hp + PLAYER.regenPerSec * dtSec);
+  }
+  const shieldDelay = (p.shield <= 0 && p.shieldBrokenAt) ? PLAYER.shieldBreakRegenMs : PLAYER.regenDelayMs;
+  if (p.shieldMax && p.shield < p.shieldMax && now - p.lastDamagedAt >= shieldDelay) {
+    p.shield = Math.min(p.shieldMax, p.shield + p.shieldMax / 10 * dtSec);
+  }
 }
 
 // 网格 A* 寻路：不可破坏墙=不可pass，可破坏墙=高成本可pass（宁可绕路，封死才穿）

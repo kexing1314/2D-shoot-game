@@ -185,7 +185,7 @@ function detect(p0, s) {
   }
   for (const b of gone(p0.bullets, s.bullets)) {
     if (b.boom) { // 火箭爆炸：冲击波圈扩散到真实伤害半径（b.boom = 半径）+ 外橙内黄双层粒子
-      rings.push({ x: b.x, y: b.y, r: b.boom, life: 0.35, max: 0.35 });
+      rings.push({ x: b.x, y: b.y, r: b.boom, life: 0.35, max: 0.35, color: '#ff9800', fill: '#ffb74d' });
       burst(b.x, b.y, 30, '#ff9800', 300, 0.6, 5);
       burst(b.x, b.y, 12, '#ffe082', 160, 0.4, 4);
     } else burst(b.x, b.y, 5, b.boss ? '#ff5252' : '#ffd93d', 120, 0.25, 2); // 命中火花
@@ -200,6 +200,13 @@ function detect(p0, s) {
     if (!q1 || q0.respawnIn > 0 || q1.respawnIn === 0) continue;
     burst(q1.x, q1.y, q0.id === myId ? 30 : 22, q1.color, 220, 0.7, 4);
     if (q0.id === myId) { shake = 14; flash = 1; }
+  }
+  for (const q0 of p0.players) { // 碎盾：蓝粒子爆 + 蓝色冲击波环
+    const q1 = s.players.find(p => p.id === q0.id);
+    if (q1 && q0.respawnIn === 0 && q0.shield > 0 && q1.shield <= 0) {
+      burst(q1.x, q1.y, 18, '#4a9eff', 260, 0.5, 3);
+      rings.push({ x: q1.x, y: q1.y, r: 46, life: 0.3, max: 0.3, color: '#4a9eff', fill: '#9ecdf5' });
+    }
   }
   const me0 = p0.players.find(p => p.id === myId), me1 = s.players.find(p => p.id === myId);
   if (me0 && me1 && me0.respawnIn === 0 && me1.respawnIn === 0 && me1.hp < me0.hp) { // 自己受伤
@@ -467,6 +474,17 @@ function render() {
       ctx.fillStyle = gr;
       circ(p.x, p.y, G.PLAYER.r);
     }
+    // 护盾环绕：蓝色半透明环+微填充，盾量越少越淡，呼吸脉动
+    if (p0.shield > 0) {
+      const sf = clamp(p0.shield / G.shieldMax(p0.level), 0, 1);
+      ctx.globalAlpha = 0.25 + 0.3 * sf + 0.06 * Math.sin(t / 200);
+      ctx.strokeStyle = '#4a9eff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(p.x, p.y, G.PLAYER.r + 6, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.06 + 0.1 * sf;
+      ctx.fillStyle = '#4a9eff';
+      circ(p.x, p.y, G.PLAYER.r + 6);
+      ctx.globalAlpha = 1;
+    }
     if (p0.id === myId) {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(p.x, p.y, G.PLAYER.r, 0, Math.PI * 2); ctx.stroke();
@@ -491,9 +509,9 @@ function render() {
     if (g.life <= 0) { rings.splice(i, 1); continue; }
     const k = 1 - g.life / g.max; // 0→1 扩散进度
     ctx.globalAlpha = 1 - k;
-    ctx.strokeStyle = '#ff9800'; ctx.lineWidth = 5;
+    ctx.strokeStyle = g.color || '#ff9800'; ctx.lineWidth = 5;
     ctx.beginPath(); ctx.arc(g.x, g.y, g.r * k, 0, Math.PI * 2); ctx.stroke();
-    ctx.globalAlpha = (1 - k) * 0.22; ctx.fillStyle = '#ffb74d';
+    ctx.globalAlpha = (1 - k) * 0.22; ctx.fillStyle = g.fill || '#ffb74d';
     ctx.beginPath(); ctx.arc(g.x, g.y, g.r * k, 0, Math.PI * 2); ctx.fill();
   }
   // 粒子（世界坐标：阻尼 + 淡出缩小）

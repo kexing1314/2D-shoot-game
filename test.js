@@ -209,6 +209,17 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.equal(p.hp, 50);                    // 死亡不回
 }
 {
+  // 碎盾回盾冷却 20s（未碎仍 3s）
+  const p = { hp: 100, shield: 0, shieldMax: 25, shieldBrokenAt: 1000, lastDamagedAt: 1000, deadUntil: 0 };
+  G.regenStep(p, 20999, 0.05);
+  assert.equal(p.shield, 0);                 // 碎盾后 20s 前不回盾
+  G.regenStep(p, 21000, 0.05);
+  assert.ok(p.shield > 0);                   // 20s 到开始回
+  const q = { hp: 100, shield: 10, shieldMax: 25, lastDamagedAt: 0, deadUntil: 0 };
+  G.regenStep(q, 3000, 0.05);
+  assert.ok(q.shield > 10);                  // 没碎：脱战 3s 照回
+}
+{
   const spawns = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 200, y: 0 }];
   assert.deepEqual(G.pickFarthestSpawn(spawns, [{ x: 0, y: 0 }]), { x: 200, y: 0 });
   assert.deepEqual(G.pickFarthestSpawn(spawns, []), { x: 0, y: 0 });
