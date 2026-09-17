@@ -15,7 +15,7 @@
 ## 铁律
 - 数值一律进 shared.js，不许在 server/client 散落魔法数
 - **不做防挂加固**（用户明确：随便玩玩）；但崩溃防护类守卫要做
-- 零新依赖（唯一依赖 ws）；美术：人物精灵用 Kenney Top-down Shooter（CC0，`public/assets/` 16 张姿势图 + LICENSE），怪物/Boss/地图仍纯几何；精灵纯俯视→canvas 旋转即任意朝向，姿势 hold/gun/machine/reload 随状态切换
+- 零新依赖（唯一依赖 ws）；美术：全员精灵用 Kenney Top-down Shooter（CC0，`public/assets/` 20 张 + LICENSE）——玩家 4 角色×4 姿势（hold/gun/machine/reload）、怪物=僵尸 stand、Boss=机器人 machine（2 倍体型）；地图/墙/子弹仍纯几何；精灵纯俯视→canvas 旋转即任意朝向，走路颠簸代步态帧
 - 客户端不模拟游戏规则，只渲染 + 纯视觉特效（粒子/插值/震动）
 - 改完必同步：test.js 断言 + spec 文档 + 台账
 

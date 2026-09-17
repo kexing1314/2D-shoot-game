@@ -60,6 +60,11 @@ for (let c = 0; c < 4; c++) for (const pose of ['hold', 'gun', 'machine', 'reloa
   im.src = 'assets/char' + c + '_' + pose + '.png';
   SPR[c + '_' + pose] = im;
 }
+for (const k of ['mon_stand', 'boss_hold', 'boss_machine']) {
+  const im = new Image();
+  im.src = 'assets/' + k + '.png';
+  SPR[k] = im;
+}
 const POSE_BY_WEAPON = { pistol: 'gun', mg: 'machine', shotgun: 'machine', cannon: 'machine' };
 
 // 状态 diff → 推测事件放粒子（子弹消失≈命中/撞墙，客户端不区分，火花一样小）
@@ -188,29 +193,63 @@ function render() {
       ctx.setLineDash([]);
     }
   }
-  // 怪物（红三角：光晕 + 呼吸脉动 + 描边）
+  // 怪物（僵尸精灵：朝追击方向旋转 + 跑动颠簸；红色地面环辨识）
   for (const m0 of state.monsters) {
     const m = lp(m0, maps.monsters);
-    if (!inView(m.x, m.y, G.MONSTER.r + 10)) continue;
-    const pulse = 1 + 0.08 * Math.sin(t / 150 + m0.id);
-    ctx.globalAlpha = 0.15; ctx.fillStyle = '#ff5252';
-    circ(m.x, m.y, G.MONSTER.r * 1.7);
+    if (!inView(m.x, m.y, G.MONSTER.r + 24)) continue;
+    const o = maps.monsters && maps.monsters.get(m0.id);
+    const moving = o && Math.abs(m.x - o.x) + Math.abs(m.y - o.y) > 0.2;
+    let ang = aimAngle.get('m' + m0.id) || 0;
+    if (moving) ang = Math.atan2(m.y - o.y, m.x - o.x);
+    aimAngle.set('m' + m0.id, ang);
+    ctx.globalAlpha = 0.3; ctx.fillStyle = '#ff5252';
+    ctx.beginPath(); ctx.ellipse(m.x, m.y + 4, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
-    triPath(m.x, m.y, G.MONSTER.r * pulse);
-    ctx.fillStyle = '#ff5252'; ctx.fill();
-    ctx.strokeStyle = '#ff8a80'; ctx.lineWidth = 1.5; ctx.stroke();
+    const img = SPR.mon_stand;
+    if (img && img.complete && img.width) {
+      const bob = moving ? Math.sin(t / 60 + m0.id) * 1.5 : 0;
+      ctx.save();
+      ctx.translate(m.x + Math.cos(ang) * bob, m.y + Math.sin(ang) * bob);
+      ctx.rotate(ang);
+      ctx.imageSmoothingEnabled = false;
+      const S = 0.9;
+      ctx.drawImage(img, -img.width * S / 2, -img.height * S / 2, img.width * S, img.height * S);
+      ctx.restore();
+      ctx.imageSmoothingEnabled = true;
+    } else {
+      triPath(m.x, m.y, G.MONSTER.r);
+      ctx.fillStyle = '#ff5252'; ctx.fill();
+    }
   }
-  // Boss（紫渐变球 + 光晕 + 武器名 + 血条）
+  // Boss（机器人精英精灵：体型为玩家 2 倍、常持仓枪姿势；紫光晕 + 武器名 + 血条）
   for (const b0 of state.bosses) {
     const b = lp(b0, maps.bosses);
-    if (!inView(b.x, b.y, G.BOSS.r + 24)) continue;
-    ctx.globalAlpha = 0.2; ctx.fillStyle = '#9b59b6';
-    circ(b.x, b.y, G.BOSS.r * 1.5);
+    if (!inView(b.x, b.y, G.BOSS.r + 32)) continue;
+    const o = maps.bosses && maps.bosses.get(b0.id);
+    const moving = o && Math.abs(b.x - o.x) + Math.abs(b.y - o.y) > 0.2;
+    let ang = aimAngle.get('b' + b0.id) || 0;
+    if (moving) ang = Math.atan2(b.y - o.y, b.x - o.x);
+    aimAngle.set('b' + b0.id, ang);
+    ctx.globalAlpha = 0.25; ctx.fillStyle = '#9b59b6';
+    ctx.beginPath(); ctx.ellipse(b.x, b.y + 8, 36, 22, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
-    const gr = ctx.createRadialGradient(b.x - 10, b.y - 10, 4, b.x, b.y, G.BOSS.r);
-    gr.addColorStop(0, '#d7bde2'); gr.addColorStop(1, '#7d3c98');
-    ctx.fillStyle = gr;
-    circ(b.x, b.y, G.BOSS.r);
+    const img = SPR.boss_machine;
+    if (img && img.complete && img.width) {
+      const bob = moving ? Math.sin(t / 80 + b0.id) * 1.5 : 0;
+      ctx.save();
+      ctx.translate(b.x + Math.cos(ang) * bob, b.y + Math.sin(ang) * bob);
+      ctx.rotate(ang);
+      ctx.imageSmoothingEnabled = false;
+      const S = 2.0;
+      ctx.drawImage(img, -img.width * S / 2, -img.height * S / 2, img.width * S, img.height * S);
+      ctx.restore();
+      ctx.imageSmoothingEnabled = true;
+    } else {
+      const gr = ctx.createRadialGradient(b.x - 10, b.y - 10, 4, b.x, b.y, G.BOSS.r);
+      gr.addColorStop(0, '#d7bde2'); gr.addColorStop(1, '#7d3c98');
+      ctx.fillStyle = gr;
+      circ(b.x, b.y, G.BOSS.r);
+    }
     bar(b.x, b.y - G.BOSS.r - 10, 48, b0.hp / G.BOSS.hp);
     ctx.fillStyle = '#ffd700'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(WEAPON_NAMES[b0.weapon] || b0.weapon || '', b.x, b.y - G.BOSS.r - 18);
@@ -265,7 +304,7 @@ function render() {
       ctx.translate(p.x + Math.cos(ang) * (bob - rec), p.y + Math.sin(ang) * (bob - rec));
       ctx.rotate(ang);
       ctx.imageSmoothingEnabled = false;                          // 像素风保持锐利
-      const S = 1.25;
+      const S = 1.0;
       ctx.drawImage(img, -img.width * S / 2, -img.height * S / 2, img.width * S, img.height * S);
       ctx.restore();
       ctx.imageSmoothingEnabled = true;
