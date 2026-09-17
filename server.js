@@ -53,7 +53,7 @@ function enterRoom(ws, room, name) {
   const used = new Set([...room.players.values()].map(p => p.color));
   const color = G.COLORS.find(c => !used.has(c)) || G.COLORS[0];
   const others = [...room.players.values()].filter(p => !p.deadUntil);
-  const s = G.pickFarthestSpawn(G.PLAYER_SPAWNS, others);
+  const s = G.pickFarthestSpawn(room.map.playerSpawns, others);
   const p = {
     id, ws, name: String(name || '玩家').slice(0, 12), color,
     x: s.x, y: s.y, hp: G.PLAYER.hpMax, weapon: 'pistol',
@@ -63,7 +63,7 @@ function enterRoom(ws, room, name) {
   };
   room.players.set(id, p);
   ws.room = room; ws.playerId = id;
-  send(ws, { t: 'joined', id, code: room.code, color });
+  send(ws, { t: 'joined', id, code: room.code, color, map: room.mapKey });
   if (!room.timer) room.timer = setInterval(() => tick(room), G.TICK_MS);
 }
 
@@ -97,7 +97,7 @@ function tick(room) {
       const speed = G.PLAYER.speed * (now < (p.panicUntil || 0) ? G.PLAYER.panicMul : 1); // 低血加速
       const m = G.moveWithWalls(p.x, p.y,
         dx / l * speed * dt, dy / l * speed * dt,
-        G.PLAYER.r, G.WALLS);
+        G.PLAYER.r, room.map.walls);
       p.x = m.x; p.y = m.y;
     }
     G.regenStep(p, now, dt);
@@ -120,7 +120,7 @@ function tick(room) {
 
   // 2. 子弹：推进 + 命中（爆炸弹在射程耗尽/撞墙处引爆）
   room.bullets = room.bullets.filter(b => {
-    if (!G.bulletStep(b, dt, G.WALLS)) {
+    if (!G.bulletStep(b, dt, room.map)) {
       if (b.explode) boom(room, b, now);
       return false;
     }
@@ -173,7 +173,7 @@ function tick(room) {
   const alive = [...room.players.values()].filter(p => !p.deadUntil);
   for (const m of room.monsters) {
     const target = nearest(alive, m.x, m.y);
-    G.chaseStep(m, G.MONSTER.r, target, G.MONSTER.speed, dt, G.WALLS);
+    G.chaseStep(m, G.MONSTER.r, target, G.MONSTER.speed, dt, room.map.walls);
     if (target && now >= m.nextHit && G.dist(m.x, m.y, target.x, target.y) < G.MONSTER.r + G.PLAYER.r) {
       damagePlayer(room, target, G.MONSTER.dmg, null, now, m);
       m.nextHit = now + G.MONSTER.cooldownMs;
@@ -182,7 +182,7 @@ function tick(room) {
   // 4b. Boss：缓慢追击；玩家进入所持武器射程（= 视野）内则朝其精确角度开火
   for (const bs of room.bosses) {
     const target = nearest(alive, bs.x, bs.y);
-    G.chaseStep(bs, G.BOSS.r, target, G.BOSS.speed, dt, G.WALLS);
+    G.chaseStep(bs, G.BOSS.r, target, G.BOSS.speed, dt, room.map.walls);
     if (!target) continue;
     const d = G.dist(bs.x, bs.y, target.x, target.y);
     if (d <= 0 || d > G.WEAPONS[bs.weapon].range) continue;
@@ -205,10 +205,10 @@ function tick(room) {
   if (room.players.size > 0) {
     if (now - room.lastMonster >= G.MONSTER.spawnEveryMs && room.monsters.length < G.MONSTER.cap) {
       room.lastMonster = now;
-      room.monsters.push(edgeSpawn());
+      room.monsters.push(edgeSpawn(room.map));
     }
     if (now - room.lastBoss >= G.BOSS.spawnEveryMs && room.bosses.length < G.BOSS.cap) {
-      const s = G.pickBossSpawn(G.BOSS_SPAWNS, room.bosses, alive);
+      const s = G.pickBossSpawn(room.map.bossSpawns, room.bosses, alive);
       if (s) {
         room.lastBoss = now;
         room.bosses.push({ id: ++eid, x: s.x, y: s.y, hp: G.BOSS.hp, weapon: dropWeapon(), lastFire: 0, firing: false, phaseEnd: 0 });
@@ -221,7 +221,7 @@ function tick(room) {
 
 function respawn(room, p, now) {
   const others = [...room.players.values()].filter(o => o.id !== p.id && !o.deadUntil);
-  const s = G.pickFarthestSpawn(G.PLAYER_SPAWNS, others);
+  const s = G.pickFarthestSpawn(room.map.playerSpawns, others);
   p.x = s.x; p.y = s.y;
   p.hp = G.PLAYER.hpMax;
   p.deadUntil = 0;
@@ -243,7 +243,7 @@ function damagePlayer(room, p, dmg, attackerId, now, src) {
     const d = G.dist(src.x, src.y, p.x, p.y) || 1;
     const m = G.moveWithWalls(p.x, p.y,
       (p.x - src.x) / d * G.PLAYER.knockback, (p.y - src.y) / d * G.PLAYER.knockback,
-      G.PLAYER.r, G.WALLS);
+      G.PLAYER.r, room.map.walls);
     p.x = m.x; p.y = m.y;
   }
   if (p.hp > 0) {
@@ -299,15 +299,15 @@ function dropWeapon() {
   return names[Math.floor(Math.random() * names.length)];
 }
 
-function edgeSpawn() {
+function edgeSpawn(map) {
   const m = 60; // 距边缘留白，避开 20px 边界墙
   const side = Math.floor(Math.random() * 4);
-  const rx = () => m + Math.random() * (G.MAP.w - 2 * m);
-  const ry = () => m + Math.random() * (G.MAP.h - 2 * m);
+  const rx = () => m + Math.random() * (map.w - 2 * m);
+  const ry = () => m + Math.random() * (map.h - 2 * m);
   const pos = side === 0 ? { x: rx(), y: m }
-    : side === 1 ? { x: rx(), y: G.MAP.h - m }
+    : side === 1 ? { x: rx(), y: map.h - m }
     : side === 2 ? { x: m, y: ry() }
-    : { x: G.MAP.w - m, y: ry() };
+    : { x: map.w - m, y: ry() };
   return { id: ++eid, x: pos.x, y: pos.y, hp: G.MONSTER.hp, nextHit: 0 };
 }
 
@@ -351,8 +351,10 @@ wss.on('connection', ws => {
     if (m.t === 'create') {
       if (ws.room) return;
       const code = makeCode();
+      const mapKey = G.MAPS[m.map] ? m.map : G.DEFAULT_MAP; // 房主选图，非法值回退默认
       const room = {
-        code, players: new Map(), monsters: [], bosses: [], bullets: [], pickups: [],
+        code, mapKey, map: G.MAPS[mapKey],
+        players: new Map(), monsters: [], bosses: [], bullets: [], pickups: [],
         timer: null, lastMonster: Date.now(), lastBoss: Date.now(),
       };
       rooms.set(code, room);

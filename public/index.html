@@ -14,16 +14,24 @@
   #msg { margin-top: 10px; color: #ff6b6b; min-height: 20px; }
   #game { display: none; }
   canvas { display: block; background: #16213e; }
+  #maps { display: flex; gap: 10px; justify-content: center; margin: 14px 0; flex-wrap: wrap; }
+  .mapcard { cursor: pointer; border: 2px solid #444; border-radius: 6px; padding: 5px; background: #16213e; }
+  .mapcard.sel { border-color: #4a9eff; box-shadow: 0 0 8px #4a9eff88; }
+  .mapcard canvas { border-radius: 3px; }
+  .mapcard div { font-size: 12px; margin-top: 4px; color: #ccc; }
+  .hint { font-size: 12px; color: #888; margin: 4px 0; }
 </style>
 </head>
 <body>
   <div id="lobby">
     <h1>2D 射击小游戏</h1>
     <p>WASD 移动 · 方向键射击</p>
-    <input id="name" placeholder="昵称" maxlength="12"><br>
+    <input id="name" placeholder="昵称" maxlength="12">
+    <div id="maps"></div>
     <button id="createBtn">创建房间</button><br>
     <input id="code" placeholder="房间码" maxlength="4">
-    <button id="joinBtn">加入</button>
+    <button id="joinBtn">加入房间</button>
+    <p class="hint">地图由房主选择 · 加入者跟随房间地图</p>
     <div id="msg"></div>
   </div>
   <div id="game"><canvas id="canvas" width="1280" height="720"></canvas></div>

@@ -24,6 +24,8 @@ function go(msg) {
 function startGame(m) {
   myId = m.id;
   roomCode = m.code;
+  curMapKey = G.MAPS[m.map] ? m.map : G.DEFAULT_MAP; // 房主选的图，joined 带回
+  curMap = G.MAPS[curMapKey];
   $('lobby').style.display = 'none';
   $('game').style.display = 'block';
 }
@@ -37,14 +39,83 @@ function backToLobby(msg) {
 }
 
 const name = () => $('name').value.trim() || '玩家';
-$('createBtn').onclick = () => go({ t: 'create', name: name() });
+$('createBtn').onclick = () => go({ t: 'create', name: name(), map: selMap });
 $('joinBtn').onclick = () => go({ t: 'join', name: name(), code: $('code').value.trim().toUpperCase() });
+
+// —— 大厅地图选择卡：小 canvas 画墙布局预览，点选高亮 ——
+let selMap = G.DEFAULT_MAP;
+function buildMapCards() {
+  const box = $('maps');
+  box.innerHTML = '';
+  for (const [key, mp] of Object.entries(G.MAPS)) {
+    const card = document.createElement('div');
+    card.className = 'mapcard' + (key === selMap ? ' sel' : '');
+    const cv = document.createElement('canvas');
+    cv.width = 150; cv.height = Math.round(150 * mp.h / mp.w);
+    const c = cv.getContext('2d');
+    c.fillStyle = '#0d1526'; c.fillRect(0, 0, cv.width, cv.height);
+    c.fillStyle = '#e8722a';
+    for (const w of mp.walls) {
+      c.fillRect(w.x / mp.w * cv.width, w.y / mp.h * cv.height,
+        Math.max(1, w.w / mp.w * cv.width), Math.max(1, w.h / mp.h * cv.height));
+    }
+    const label = document.createElement('div');
+    label.textContent = mp.name;
+    card.append(cv, label);
+    card.onclick = () => { selMap = key; buildMapCards(); };
+    box.appendChild(card);
+  }
+}
+buildMapCards();
 
 // —— 渲染 ——
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
 
 let prev = null, recvTime = 0;   // 插值：实体画在 prev 与 state 之间
+let curMapKey = G.DEFAULT_MAP, curMap = G.MAPS[G.DEFAULT_MAP]; // 当前房间的地图（joined 带回）
+const FLOORS = {};               // 地砖图（同包 CC0，按地图 floor key）
+for (const k of ['grass', 'dirt', 'ice', 'clay']) {
+  const im = new Image();
+  im.src = 'assets/floor_' + k + '.png';
+  FLOORS[k] = im;
+}
+const floorPat = {};             // 地砖 canvas pattern 缓存
+
+// 装饰 props（无碰撞，纯客户端）：种子随机撒灌木/木箱/桶，避开墙与刷新点
+const propsCache = {};
+function propsOf(key) {
+  if (propsCache[key]) return propsCache[key];
+  const mp = G.MAPS[key];
+  let s = 987654321;
+  const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  const list = [];
+  for (let i = 0; i < 80 && list.length < 24; i++) {
+    const x = 120 + rnd() * (mp.w - 240), y = 120 + rnd() * (mp.h - 240);
+    if (mp.walls.some(w => x > w.x - 50 && x < w.x + w.w + 50 && y > w.y - 50 && y < w.y + w.h + 50)) continue;
+    if (mp.playerSpawns.some(p => G.dist(x, y, p.x, p.y) < 300)) continue;
+    if (mp.bossSpawns.some(p => G.dist(x, y, p.x, p.y) < 300)) continue;
+    list.push({ x, y, k: list.length % 3 });
+  }
+  return propsCache[key] = list;
+}
+function drawProps() {
+  for (const p of propsOf(curMapKey)) {
+    if (p.k === 0) { // 灌木：双绿圆
+      ctx.fillStyle = '#2e8b4a'; circ(p.x, p.y, 14);
+      ctx.fillStyle = '#3aa655'; circ(p.x - 6, p.y - 5, 9);
+    } else if (p.k === 1) { // 木箱：棕方块+板条
+      ctx.fillStyle = '#a9743f'; ctx.fillRect(p.x - 11, p.y - 11, 22, 22);
+      ctx.strokeStyle = '#7d5426'; ctx.lineWidth = 2;
+      ctx.strokeRect(p.x - 11, p.y - 11, 22, 22);
+      ctx.beginPath(); ctx.moveTo(p.x - 11, p.y); ctx.lineTo(p.x + 11, p.y); ctx.stroke();
+    } else { // 桶：灰圆+环
+      ctx.fillStyle = '#8a8f98'; circ(p.x, p.y, 10);
+      ctx.strokeStyle = '#5f646c'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 6, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+}
 let parts = [];                  // 粒子（世界坐标，纯客户端特效，上限 300）
 let rings = [];                  // 爆炸冲击波圈（半径 = 服务器广播的实际伤害半径）
 let lastFrame = performance.now();
@@ -132,8 +203,8 @@ function render() {
   // 镜头跟随（插值位置），地图边缘钳制 + 受击震动
   const me = lp(meCur, maps.players);
   shake = Math.max(0, shake - dt * 30);
-  const camX = clamp(me.x - canvas.width / 2, 0, G.MAP.w - canvas.width);
-  const camY = clamp(me.y - canvas.height / 2, 0, G.MAP.h - canvas.height);
+  const camX = clamp(me.x - canvas.width / 2, 0, curMap.w - canvas.width);
+  const camY = clamp(me.y - canvas.height / 2, 0, curMap.h - canvas.height);
   const shX = shake ? (Math.random() - 0.5) * shake : 0;
   const shY = shake ? (Math.random() - 0.5) * shake : 0;
   const inView = (x, y, r) =>
@@ -142,23 +213,27 @@ function render() {
   ctx.save();
   ctx.translate(Math.round(-camX + shX), Math.round(-camY + shY));
 
-  // 地面网格（随镜头滚动，提供速度感）
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let x = Math.floor(camX / 100) * 100; x <= camX + canvas.width; x += 100) { ctx.moveTo(x, camY); ctx.lineTo(x, camY + canvas.height); }
-  for (let y = Math.floor(camY / 100) * 100; y <= camY + canvas.height; y += 100) { ctx.moveTo(camX, y); ctx.lineTo(camX + canvas.width, y); }
-  ctx.stroke();
+  // 地面：同包 CC0 地砖 pattern（每张地图一个主题）+ 种子散布装饰 props
+  const fimg = FLOORS[curMap.floor];
+  if (fimg && fimg.complete && fimg.width) {
+    if (!floorPat[curMap.floor]) floorPat[curMap.floor] = ctx.createPattern(fimg, 'repeat');
+    ctx.fillStyle = floorPat[curMap.floor];
+    ctx.fillRect(0, 0, curMap.w, curMap.h);
+  } else {
+    ctx.fillStyle = '#101828';
+    ctx.fillRect(0, 0, curMap.w, curMap.h);
+  }
+  drawProps();
 
-  // 墙（主体 + 亮顶边 + 暗底边，假 3D）
-  for (const w of G.WALLS) {
+  // 墙（sample 画风：深灰主体 + 橙色粗描边 + 内暗面）
+  for (const w of curMap.walls) {
     if (!inView(w.x + w.w / 2, w.y + w.h / 2, Math.max(w.w, w.h) / 2)) continue;
-    ctx.fillStyle = '#3d4a6b';
+    ctx.fillStyle = '#3f4145';
     ctx.fillRect(w.x, w.y, w.w, w.h);
-    ctx.fillStyle = '#5a6a94';
-    ctx.fillRect(w.x, w.y, w.w, 4);
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(w.x, w.y + w.h - 4, w.w, 4);
+    ctx.strokeStyle = '#e8722a'; ctx.lineWidth = 6;
+    ctx.strokeRect(w.x + 3, w.y + 3, w.w - 6, w.h - 6);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fillRect(w.x + 8, w.y + 8, Math.max(0, w.w - 16), Math.max(0, w.h - 16));
   }
   // 拾取物（旋转金方块 + 脉冲光环）
   for (const pk of state.pickups) {
@@ -455,15 +530,15 @@ function drawHUD(me) {
 }
 
 function minimap() {
-  const mw = 200, mh = mw * G.MAP.h / G.MAP.w; // 200 × 112.5
+  const mw = 200, mh = mw * curMap.h / curMap.w;
   const ox = canvas.width - mw - 10, oy = 10;
-  const sx = mw / G.MAP.w, sy = mh / G.MAP.h;
+  const sx = mw / curMap.w, sy = mh / curMap.h;
   const dot = (x, y, r) => { ctx.beginPath(); ctx.arc(ox + x * sx, oy + y * sy, r, 0, Math.PI * 2); ctx.fill(); };
 
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.fillRect(ox, oy, mw, mh);
   ctx.fillStyle = '#3d4a6b';
-  for (const w of G.WALLS) ctx.fillRect(ox + w.x * sx, oy + w.y * sy, Math.max(1, w.w * sx), Math.max(1, w.h * sy));
+  for (const w of curMap.walls) ctx.fillRect(ox + w.x * sx, oy + w.y * sy, Math.max(1, w.w * sx), Math.max(1, w.h * sy));
   ctx.fillStyle = '#ffd700';
   for (const pk of state.pickups) dot(pk.x, pk.y, 1.5);
   ctx.fillStyle = '#ff5252';

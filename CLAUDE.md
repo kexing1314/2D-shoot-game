@@ -31,5 +31,7 @@
 ## 当前状态（2026-09-13）
 - **已上线**：feat/game 已合并进 `main` 并推送 GitHub（kexing1314/2D-shoot-game），部署在阿里云 Ubuntu 服务器（`/opt/game` + pm2 进程名 `game` + 安全组放行 TCP 3000），公网 `http://IP:3000` 可玩；以后直接在 main 上开发
 - 更新流程：本地 commit + `git push` → 服务器 `cd /opt/game && git pull && pm2 restart game`（纯 client.js 改动免 restart，玩家刷新即可）
-- 核心游戏 + 全部试玩迭代完成（状态栏/武器射程/斜射/持枪Boss+攻击节奏/受伤硬直击退/视觉升级包/低血肾上腺素/加农炮爆炸弹+冲击波圈/数值调优/换弹系统+头顶提示/30Hz tick）；本地开服用 start.bat（纯 ASCII，cmd GBK 陷阱）
+- 核心游戏 + 全部试玩迭代完成（状态栏/武器射程/斜射/持枪Boss+攻击节奏/受伤硬直击退/视觉升级包/低血肾上腺素/加农炮爆炸弹+冲击波圈/数值调优/换弹系统+头顶提示/30Hz tick/全员精灵建模）
+- **多地图**：shared.js `MAPS` 表 4 张（草地要塞/沙漠废墟/冰原站台/陶土峡谷，4200~5200 宽），房主大厅选图（卡片带墙布局预览）→ create 带 map key → joined 带回；地砖同包 CC0 四主题 pattern、墙=深灰+橙描边、种子散布无碰撞 props；test.js 逐图断言墙界/刷新点间距
+- 本地开服用 start.bat（纯 ASCII，cmd GBK 陷阱）
 - tick 频率 30Hz（TICK_MS=33，云端降延迟调优）；用户 ping ~49ms，体感延迟 ~65ms 属物理底线

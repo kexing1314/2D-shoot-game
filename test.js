@@ -9,18 +9,22 @@ const near = (px, py, w, d) => px + d > w.x && px - d < w.x + w.w && py + d > w.
 assert.equal(G.TICK_MS, 33);
 assert.ok(G.COLORS.length >= G.ROOM.maxPlayers, '颜色数须不少于最大玩家数');
 
-for (const w of G.WALLS) {
-  assert.ok(w.x >= 0 && w.y >= 0 && w.x + w.w <= G.MAP.w && w.y + w.h <= G.MAP.h,
-    '墙越界: ' + JSON.stringify(w));
-}
-for (const s of G.BOSS_SPAWNS) {
-  for (const w of G.WALLS) {
-    assert.ok(!near(s.x, s.y, w, 150), 'Boss 刷新点距墙须 >150px: ' + JSON.stringify(s));
+assert.ok(Object.keys(G.MAPS).length >= 4, '地图至少 4 张');
+for (const [key, mp] of Object.entries(G.MAPS)) {
+  assert.ok(mp.name && mp.floor && mp.w > 0 && mp.h > 0, `地图 ${key} 缺 name/floor/尺寸`);
+  for (const w of mp.walls) {
+    assert.ok(w.x >= 0 && w.y >= 0 && w.x + w.w <= mp.w && w.y + w.h <= mp.h,
+      `地图 ${key} 墙越界: ` + JSON.stringify(w));
   }
-}
-for (const s of G.PLAYER_SPAWNS) {
-  for (const w of G.WALLS) {
-    assert.ok(!near(s.x, s.y, w, 40), '玩家刷新点撞墙: ' + JSON.stringify(s));
+  for (const s of mp.bossSpawns) {
+    for (const w of mp.walls) {
+      assert.ok(!near(s.x, s.y, w, 150), `地图 ${key} Boss 刷新点距墙须 >150px: ` + JSON.stringify(s));
+    }
+  }
+  for (const s of mp.playerSpawns) {
+    for (const w of mp.walls) {
+      assert.ok(!near(s.x, s.y, w, 40), `地图 ${key} 玩家刷新点撞墙: ` + JSON.stringify(s));
+    }
   }
 }
 for (const [name, wp] of Object.entries(G.WEAPONS)) {
@@ -50,7 +54,7 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
 }
 // 空旷处自由移动
 {
-  const p = G.moveWithWalls(500, 500, 10, -10, 16, G.WALLS);
+  const p = G.moveWithWalls(500, 500, 10, -10, 16, G.MAPS.grass.walls);
   assert.equal(p.x, 510);
   assert.equal(p.y, 490);
 }
@@ -117,23 +121,24 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.equal(ps[0].explodeDmg, 0);
 }
 {
+  const TM = { w: 3200, h: 1800, walls: [] }; // bulletStep 只需要地图的尺寸+墙
   const b = { x: 100, y: 100, vx: 500, vy: 0, size: 3, pierce: false, range: 600 };
-  assert.equal(G.bulletStep(b, 0.05, []), true);
+  assert.equal(G.bulletStep(b, 0.05, TM), true);
   assert.equal(b.x, 125);
   assert.equal(b.range, 575); // 每 tick 扣飞行距离 500×0.05=25
   // 撞墙移除
   const b2 = { x: 190, y: 100, vx: 500, vy: 0, size: 3, pierce: true, range: 600 };
-  assert.equal(G.bulletStep(b2, 0.05, [{ x: 200, y: 0, w: 20, h: 200 }]), false);
+  assert.equal(G.bulletStep(b2, 0.05, { ...TM, walls: [{ x: 200, y: 0, w: 20, h: 200 }] }), false);
   // 出图移除（穿透弹也一样）
   const b3 = { x: 3190, y: 100, vx: 500, vy: 0, size: 3, pierce: true, range: 600 };
-  assert.equal(G.bulletStep(b3, 0.05, []), false);
+  assert.equal(G.bulletStep(b3, 0.05, TM), false);
   // 射程耗尽移除：剩 20px，飞 25px → 消失
   const b4 = { x: 100, y: 100, vx: 500, vy: 0, size: 3, pierce: false, range: 20 };
-  assert.equal(G.bulletStep(b4, 0.05, []), false);
+  assert.equal(G.bulletStep(b4, 0.05, TM), false);
   // 斜向飞行按实际距离扣（vx=vy≈353.55，速度 500）
   const s = 500 / Math.SQRT2;
   const b5 = { x: 100, y: 100, vx: s, vy: s, size: 3, pierce: false, range: 500 };
-  assert.equal(G.bulletStep(b5, 0.05, []), true);
+  assert.equal(G.bulletStep(b5, 0.05, TM), true);
   assert.ok(Math.abs(b5.range - 475) < 1e-9);
 }
 
@@ -164,11 +169,12 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.deepEqual(G.pickFarthestSpawn(spawns, []), { x: 0, y: 0 });
 }
 {
-  // (400,1500) 被 Boss 占据 → 只能选另两个；玩家在 (400,1500) → 选最远的 (2800,300)
-  const s = G.pickBossSpawn(G.BOSS_SPAWNS, [{ x: 400, y: 1500 }], [{ x: 400, y: 1500 }]);
-  assert.deepEqual(s, { x: 2800, y: 300 });
+  const BS = G.MAPS.grass.bossSpawns; // (600,2100) (4200,600) (2400,2500)
+  // 第一点被 Boss 占据 → 只能选另两个；玩家在该点 → 选最远的 (4200,600)
+  const s = G.pickBossSpawn(BS, [{ x: BS[0].x, y: BS[0].y }], [{ x: BS[0].x, y: BS[0].y }]);
+  assert.deepEqual(s, BS[1]);
   // 全部被占 → null
-  const all = G.pickBossSpawn(G.BOSS_SPAWNS, G.BOSS_SPAWNS.map(p => ({ x: p.x, y: p.y })), []);
+  const all = G.pickBossSpawn(BS, BS.map(p => ({ x: p.x, y: p.y })), []);
   assert.equal(all, null);
 }
 

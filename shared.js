@@ -5,7 +5,6 @@
   else root.GameShared = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
 
-const MAP = { w: 3200, h: 1800 };
 const TICK_MS = 33; // 30 tick/s：云端联机降体感延迟（按键等待+插值落后各 ~1/3 缩短）
 
 // fireStunMs = 受伤后停火硬直；knockback = 每次受击被推开的距离(px)
@@ -29,31 +28,64 @@ const WEAPONS = {
 
 const COLORS = ['#4a9eff', '#ff9f43', '#2ecc71', '#e84393'];
 
-// 四周边界墙（厚 20）+ 内部障碍。内部墙布局须避开 Boss 刷新点周边（空旷区）
-const WALLS = [
-  { x: 0, y: 0, w: MAP.w, h: 20 },
-  { x: 0, y: MAP.h - 20, w: MAP.w, h: 20 },
-  { x: 0, y: 0, w: 20, h: MAP.h },
-  { x: MAP.w - 20, y: 0, w: 20, h: MAP.h },
-  { x: 700,  y: 400,  w: 240, h: 40 },
-  { x: 1500, y: 300,  w: 40,  h: 300 },
-  { x: 2200, y: 500,  w: 300, h: 40 },
-  { x: 900,  y: 1000, w: 40,  h: 350 },
-  { x: 1300, y: 800,  w: 200, h: 200 },
-  { x: 1600, y: 1200, w: 400, h: 40 },
-  { x: 2400, y: 1100, w: 40,  h: 300 },
-];
-
-// 重生点：四角。重生时选离其他玩家最远的
-const PLAYER_SPAWNS = [
-  { x: 200, y: 200 }, { x: 3000, y: 200 },
-  { x: 200, y: 1600 }, { x: 3000, y: 1600 },
-];
-
-// Boss 固定刷新点（周边空旷，形成天然争夺区）
-const BOSS_SPAWNS = [
-  { x: 400, y: 1500 }, { x: 2800, y: 300 }, { x: 1600, y: 1500 },
-];
+// 地图表：加地图 = 加一项；floor = 客户端地砖 key；walls = 边界墙（厚 20）+ 内部障碍
+// 内部墙布局须避开 Boss 刷新点周边（空旷区），间距断言在 test.js 自动把关
+function bounds(w, h) {
+  return [
+    { x: 0, y: 0, w, h: 20 }, { x: 0, y: h - 20, w, h: 20 },
+    { x: 0, y: 0, w: 20, h }, { x: w - 20, y: 0, w: 20, h },
+  ];
+}
+const MAPS = {
+  grass: { // 中央十字堡垒围出环形走廊 + 四象限对称 L 掩体
+    name: '草地要塞', floor: 'grass', w: 4800, h: 2700,
+    walls: [...bounds(4800, 2700),
+      { x: 2250, y: 1200, w: 300, h: 300 },
+      { x: 2350, y: 700, w: 100, h: 500 }, { x: 2350, y: 1500, w: 100, h: 500 },
+      { x: 1750, y: 1300, w: 500, h: 100 }, { x: 2550, y: 1300, w: 500, h: 100 },
+      { x: 800, y: 800, w: 400, h: 60 }, { x: 800, y: 800, w: 60, h: 400 },
+      { x: 3600, y: 800, w: 400, h: 60 }, { x: 3940, y: 800, w: 60, h: 400 },
+      { x: 800, y: 1840, w: 400, h: 60 }, { x: 800, y: 1500, w: 60, h: 400 },
+      { x: 3600, y: 1840, w: 400, h: 60 }, { x: 3940, y: 1500, w: 60, h: 400 },
+      { x: 1400, y: 1300, w: 120, h: 120 }, { x: 3280, y: 1300, w: 120, h: 120 },
+      { x: 2340, y: 380, w: 120, h: 120 }, { x: 2340, y: 2200, w: 120, h: 120 }],
+    playerSpawns: [{ x: 250, y: 250 }, { x: 4550, y: 250 }, { x: 250, y: 2450 }, { x: 4550, y: 2450 }],
+    bossSpawns: [{ x: 600, y: 2100 }, { x: 4200, y: 600 }, { x: 2400, y: 2500 }],
+  },
+  desert: { // 中央环形废墟（四边留门洞）+ 角落残垣
+    name: '沙漠废墟', floor: 'dirt', w: 4800, h: 2700,
+    walls: [...bounds(4800, 2700),
+      { x: 1900, y: 900, w: 400, h: 80 }, { x: 2500, y: 900, w: 400, h: 80 },
+      { x: 1900, y: 1720, w: 400, h: 80 }, { x: 2500, y: 1720, w: 400, h: 80 },
+      { x: 1900, y: 900, w: 80, h: 900 }, { x: 2820, y: 900, w: 80, h: 900 },
+      { x: 500, y: 1200, w: 180, h: 180 }, { x: 4120, y: 1200, w: 180, h: 180 },
+      { x: 1200, y: 2200, w: 180, h: 180 }, { x: 3420, y: 2200, w: 180, h: 180 },
+      { x: 1200, y: 320, w: 180, h: 180 }, { x: 3420, y: 320, w: 180, h: 180 }],
+    playerSpawns: [{ x: 250, y: 250 }, { x: 4550, y: 250 }, { x: 250, y: 2450 }, { x: 4550, y: 2450 }],
+    bossSpawns: [{ x: 2400, y: 450 }, { x: 700, y: 2300 }, { x: 3800, y: 2400 }],
+  },
+  ice: { // 三道横墙夹两条长廊 + 中心站房
+    name: '冰原站台', floor: 'ice', w: 4200, h: 2400,
+    walls: [...bounds(4200, 2400),
+      { x: 600, y: 800, w: 1200, h: 60 }, { x: 2400, y: 800, w: 1200, h: 60 },
+      { x: 600, y: 1540, w: 1200, h: 60 }, { x: 2400, y: 1540, w: 1200, h: 60 },
+      { x: 1900, y: 1050, w: 400, h: 300 }],
+    playerSpawns: [{ x: 250, y: 250 }, { x: 3950, y: 250 }, { x: 250, y: 2150 }, { x: 3950, y: 2150 }],
+    bossSpawns: [{ x: 2100, y: 300 }, { x: 2100, y: 2100 }, { x: 300, y: 1200 }],
+  },
+  clay: { // 交错断墙形成蛇形通道
+    name: '陶土峡谷', floor: 'clay', w: 5200, h: 2600,
+    walls: [...bounds(5200, 2600),
+      { x: 1200, y: 200, w: 60, h: 1000 }, { x: 2000, y: 1400, w: 60, h: 1000 },
+      { x: 2800, y: 200, w: 60, h: 1000 }, { x: 3600, y: 1400, w: 60, h: 1000 },
+      { x: 4400, y: 200, w: 60, h: 1000 },
+      { x: 600, y: 1300, w: 140, h: 140 }, { x: 2500, y: 1200, w: 140, h: 140 },
+      { x: 4700, y: 1300, w: 140, h: 140 }],
+    playerSpawns: [{ x: 250, y: 250 }, { x: 4950, y: 250 }, { x: 250, y: 2350 }, { x: 4950, y: 2350 }],
+    bossSpawns: [{ x: 600, y: 400 }, { x: 2600, y: 2200 }, { x: 4750, y: 400 }],
+  },
+};
+const DEFAULT_MAP = 'grass';
 
 function dist(ax, ay, bx, by) {
   const dx = bx - ax, dy = by - ay;
@@ -103,14 +135,14 @@ function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner) {
   return bullets;
 }
 
-// 推进一颗子弹；false = 移除（射程耗尽、出图或撞墙，穿透弹撞墙同样移除）
-function bulletStep(b, dtSec, walls) {
+// 推进一颗子弹；false = 移除（射程耗尽、出图或撞墙，穿透弹撞墙同样移除）。map = 地图表项
+function bulletStep(b, dtSec, map) {
   b.range -= Math.hypot(b.vx, b.vy) * dtSec;
   b.x += b.vx * dtSec;
   b.y += b.vy * dtSec;
   if (b.range <= 0) return false;
-  if (b.x < 0 || b.y < 0 || b.x > MAP.w || b.y > MAP.h) return false;
-  return !walls.some(w => circleRectHit(b.x, b.y, b.size, w));
+  if (b.x < 0 || b.y < 0 || b.x > map.w || b.y > map.h) return false;
+  return !map.walls.some(w => circleRectHit(b.x, b.y, b.size, w));
 }
 
 // 直线追击（受墙阻挡；不做寻路——被墙卡住属可接受行为）
@@ -147,7 +179,7 @@ function pickBossSpawn(spawns, bosses, players) {
   return pickFarthestSpawn(free, players);
 }
 
-return { MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, WALLS, PLAYER_SPAWNS, BOSS_SPAWNS,
+return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS,
   dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
   chaseStep, regenStep, pickFarthestSpawn, pickBossSpawn };
 });
