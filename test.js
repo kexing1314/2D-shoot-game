@@ -51,10 +51,10 @@ assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
   assert.equal(G.xpNeed(1), 30);
   assert.ok(G.xpNeed(14) > G.xpNeed(7) && G.xpNeed(7) > G.xpNeed(1)); // 越升越贵
   // 波次：数量/经验随波次与难度缩放、封顶 100
-  assert.equal(G.waveCount(1), 16);
-  assert.equal(G.waveCount(10), 70);
+  assert.equal(G.waveCount(1), 22);
+  assert.equal(G.waveCount(10), 94);
   assert.equal(G.waveCount(99), 100);
-  assert.equal(G.waveCount(1, 2), 32);
+  assert.equal(G.waveCount(1, 2), 44);
   assert.equal(G.waveXp(1), 10);
   assert.equal(G.waveXp(10), 37);
   assert.equal(G.waveBossXp(1), 100);
@@ -82,9 +82,22 @@ assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
   assert.equal(G.monsterSpeedMul(1000), 2);
   assert.equal(G.monsterSpeedMul(3000), 3);
   // 近战前摇：第 1 波 0.7s 可躲，第 14 波起 50ms 贴到必中
-  assert.equal(G.waveWindupMs(1), 700);
-  assert.equal(G.waveWindupMs(14), 50);
+  assert.equal(G.waveWindupMs(1), 550);
+  assert.equal(G.waveWindupMs(11), 50);
   assert.equal(G.waveWindupMs(99), 50);
+  // 怪物类型表 + 混编 + 精英
+  assert.deepEqual(Object.keys(G.MONSTER_TYPES).sort(), ['brute', 'normal', 'runner', 'spitter']);
+  assert.equal(G.pickMonsterType(1, 0.99), 'normal');   // 第 1 波只有普通
+  assert.equal(G.pickMonsterType(5, 0.1), 'runner');
+  assert.equal(G.pickMonsterType(5, 0.25), 'brute');
+  assert.equal(G.pickMonsterType(5, 0.35), 'spitter');
+  assert.equal(G.pickMonsterType(5, 0.9), 'normal');
+  assert.equal(G.ELITE.chance, 0.05);
+  assert.ok(G.MONSTER_TYPES.spitter.range === 500 && G.MONSTER_TYPES.brute.hp === 250);
+  // 加压后的 Boss 参数
+  assert.equal(G.BOSS.hp, 450);
+  assert.equal(G.BOSS.cap, 3);
+  assert.equal(G.BOSS.spawnEveryMs, 25000);
   // 碰撞推开：重叠圆推到恰好相切；aOnly 只推 a，否则各退一半
   const a = { x: 0, y: 0 }, b = { x: 20, y: 0 };
   G.separate(a, 16, b, 16, [], true);

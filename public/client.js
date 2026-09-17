@@ -166,7 +166,7 @@ for (let c = 0; c < 4; c++) for (const pose of ['hold', 'gun', 'machine', 'reloa
   im.src = 'assets/char' + c + '_' + pose + '.png';
   SPR[c + '_' + pose] = im;
 }
-for (const k of ['mon_stand', 'boss_hold', 'boss_machine']) {
+for (const k of ['mon_stand', 'mon_brute', 'mon_spitter', 'boss_hold', 'boss_machine']) {
   const im = new Image();
   im.src = 'assets/' + k + '.png';
   SPR[k] = im;
@@ -179,7 +179,7 @@ function detect(p0, s) {
   const born = (a, b) => b.filter(x => !a.some(y => y.id === x.id));
   for (const b of born(p0.bullets, s.bullets)) {                                             // 枪口闪光 + 射手后坐
     burst(b.x, b.y, 3, '#fff8c4', 60, 0.12, 2);
-    if (b.boss) continue;
+    if (b.boss || b.mon) continue; // 怪物远程弹不推射手后坐
     const shooter = s.players.find(p => p.respawnIn === 0 && Math.hypot(p.x - b.x, p.y - b.y) < G.PLAYER.r + 14);
     if (shooter) recoil.set(shooter.id, performance.now() + 100);
   }
@@ -352,34 +352,42 @@ function render() {
       ctx.setLineDash([]);
     }
   }
-  // 怪物（僵尸精灵：朝追击方向旋转 + 跑动颠簸；红色地面环辨识）
+  // 怪物（类型精灵：僵尸/疾行/重装/喷吐；精英金环；朝追击方向旋转 + 跑动颠簸）
   for (const m0 of state.monsters) {
     const m = lp(m0, maps.monsters);
-    if (!inView(m.x, m.y, G.MONSTER.r + 24)) continue;
+    const MT = G.MONSTER_TYPES[m0.t] || G.MONSTER_TYPES.normal;
+    const MR = MT.r * (m0.e ? G.ELITE.scaleMul : 1);
+    if (!inView(m.x, m.y, MR + 24)) continue;
     const o = maps.monsters && maps.monsters.get(m0.id);
     const moving = o && Math.abs(m.x - o.x) + Math.abs(m.y - o.y) > 0.4;
     const tgt = moving ? Math.atan2(m.y - o.y, m.x - o.x) : null;
     const ang = tgt === null ? (aimAngle.get('m' + m0.id) || 0)
       : turnToward(aimAngle.get('m' + m0.id) || 0, tgt, 0.12);
     aimAngle.set('m' + m0.id, ang);
+    const MS = MT.scale * (m0.e ? G.ELITE.scaleMul : 1);
     ctx.globalAlpha = 0.3; ctx.fillStyle = '#ff5252';
-    ctx.beginPath(); ctx.ellipse(m.x, m.y + 4, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(m.x, m.y + 4, 15 * MS, 9 * MS, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
+    if (m0.e) { // 精英：金环脉动
+      ctx.globalAlpha = 0.5 + 0.25 * Math.sin(t / 120);
+      ctx.strokeStyle = '#ffd700'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(m.x, m.y, MR + 6, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     if (m0.w) { // 攻击前摇：红闪脉动预警圈
       ctx.globalAlpha = 0.45 + 0.3 * Math.sin(t / 50);
       ctx.strokeStyle = '#ff1744'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(m.x, m.y, G.MONSTER.r + 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(m.x, m.y, MR + 8, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    const img = SPR.mon_stand;
+    const img = m0.t === 'brute' ? SPR.mon_brute : m0.t === 'spitter' ? SPR.mon_spitter : SPR.mon_stand;
     if (img && img.complete && img.width) {
       const bob = moving ? Math.sin(t / 60 + m0.id) * 1.5 : 0;
       ctx.save();
       ctx.translate(m.x + Math.cos(ang) * bob, m.y + Math.sin(ang) * bob);
       ctx.rotate(ang);
       ctx.imageSmoothingEnabled = false;
-      const S = 0.9;
-      ctx.drawImage(img, -img.width * S / 2, -img.height * S / 2, img.width * S, img.height * S);
+      ctx.drawImage(img, -img.width * MS / 2, -img.height * MS / 2, img.width * MS, img.height * MS);
       ctx.restore();
       ctx.imageSmoothingEnabled = true;
     } else {
@@ -427,7 +435,7 @@ function render() {
     const b = lp(b0, maps.bullets);
     if (!inView(b.x, b.y, b0.size * 3 + 30)) continue;
     const o = maps.bullets && maps.bullets.get(b0.id);
-    const col = b0.boss ? '#ff5252' : '#ffd93d';
+    const col = (b0.boss || b0.mon) ? '#ff5252' : '#ffd93d';
     ctx.strokeStyle = col; ctx.globalAlpha = 0.35; ctx.lineWidth = b0.size * 2;
     ctx.beginPath(); ctx.moveTo(o ? o.x : b.x, o ? o.y : b.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     ctx.globalAlpha = 0.25; ctx.fillStyle = col;
@@ -670,7 +678,7 @@ function minimap() {
     dot(pk.x, pk.y, 1.5);
   }
   ctx.fillStyle = '#ff5252';
-  for (const m of state.monsters) dot(m.x, m.y, 1);
+  for (const m of state.monsters) { ctx.fillStyle = m.e ? '#ffd700' : '#ff5252'; dot(m.x, m.y, m.e ? 2 : 1); }
   ctx.fillStyle = '#9b59b6';
   for (const b of state.bosses) dot(b.x, b.y, 4); // Boss 大紫点
   for (const p of state.players) {

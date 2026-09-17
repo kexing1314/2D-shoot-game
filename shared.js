@@ -13,24 +13,44 @@ const TICK_MS = 33; // 30 tick/s：云端联机降体感延迟（按键等待+�
 const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000,
   stunMs: 750, stunShieldedMs: 400, knockback: 24, knockbackShielded: 12, shieldBreakRegenMs: 20000,
   panicBelow: 50, panicMul: 1.3, panicMs: 3000 };
-const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000,
+// 怪物公共参数（个体 r/hp/speed/dmg 在 MONSTER_TYPES）
+const MONSTER = { cooldownMs: 1000,
   wallDmgPerSec: 30, // 啃可破坏墙每秒伤害
   knockback: 20, stunMs: 750, // 被子弹命中的击退/僵持（不能接触攻击）
   // 赶路速度分区：近距离（=视野半宽 640×1.2）内原速，中距 ×2，远距 ×3
   zoneClose: 768, zoneMid: 1920, midMul: 2, farMul: 3 };
 const monsterSpeedMul = d => d <= MONSTER.zoneClose ? 1 : d <= MONSTER.zoneMid ? MONSTER.midMul : MONSTER.farMul;
+
+// 怪物类型：normal 僵尸 / runner 疾行（小快脆）/ brute 重装（机器人壳，厚慢重击）/ spitter 喷吐（远程弹）
+const MONSTER_TYPES = {
+  normal:  { r: 14, hp: 50,  speed: 60,  dmg: 14, scale: 1 },
+  runner:  { r: 11, hp: 30,  speed: 130, dmg: 8,  scale: 0.7 },
+  brute:   { r: 20, hp: 250, speed: 45,  dmg: 25, scale: 1.4 },
+  spitter: { r: 14, hp: 40,  speed: 55,  dmg: 10, scale: 0.9, range: 500, rateMs: 2500, bulletDmg: 12, bulletSpeed: 250 },
+};
+// 波次混编权重（低波次未解锁的类型权重归 normal）
+function pickMonsterType(wave, r0) {
+  const w = { normal: 0.6, runner: wave >= 2 ? 0.2 : 0, brute: wave >= 3 ? 0.1 : 0, spitter: wave >= 4 ? 0.1 : 0 };
+  w.normal = 1 - w.runner - w.brute - w.spitter;
+  if (r0 < w.runner) return 'runner';
+  if (r0 < w.runner + w.brute) return 'brute';
+  if (r0 < w.runner + w.brute + w.spitter) return 'spitter';
+  return 'normal';
+}
+// 精英怪：5% 混入，血×4 体×1.25 伤×1.5，死亡必掉补给
+const ELITE = { chance: 0.05, hpMul: 4, dmgMul: 1.5, scaleMul: 1.25 };
 const PATH_CELL = 60;  // A* 网格边长（px）
 
 // 波次怪潮：数量/HP/经验全走函数，diff = 难度乘数（将来菜单选项传不同 diff，room 存一个数字）
-const WAVE = { baseCount: 10, perWave: 6, maxCount: 100, hpPerWave: 0.12,
-  speedPerWave: 0.04, speedCapWaves: 8, restMs: 6000, firstDelayMs: 3000, suppliesPerRest: 2 };
+const WAVE = { baseCount: 14, perWave: 8, maxCount: 100, hpPerWave: 0.18,
+  speedPerWave: 0.04, speedCapWaves: 8, restMs: 4000, firstDelayMs: 3000, suppliesPerRest: 2 };
 const waveCount    = (wave, diff = 1) => Math.min(Math.round((WAVE.baseCount + WAVE.perWave * wave) * diff), WAVE.maxCount);
 const waveHpMul    = (wave, diff = 1) => 1 + (wave - 1) * WAVE.hpPerWave * diff;
 const waveSpeedMul = (wave, diff = 1) => 1 + Math.min(wave - 1, WAVE.speedCapWaves) * WAVE.speedPerWave;
 const waveXp       = (wave, diff = 1) => Math.round((10 + (wave - 1) * 3) * diff);
 const waveBossXp   = (wave, diff = 1) => Math.round((100 + (wave - 1) * 20) * diff);
 // 近战前摇：第 1 波 0.7s 轻松躲，第 14 波起 50ms 贴到必中
-const waveWindupMs = (wave, diff = 1) => Math.max(50, 700 - (wave - 1) * 50);
+const waveWindupMs = (wave, diff = 1) => Math.max(50, 550 - (wave - 1) * 50);
 
 // 等级：上限 15，~30 分钟满级；p=进度，六属性倍率（将来加属性只改 levelMul）
 // 满级：移速/伤害/护盾/弹速 ×2，换弹 ×2 快，射速 ×3
@@ -45,7 +65,7 @@ const xpNeed = level => Math.round(LEVELS.xpBase * Math.pow(level, LEVELS.xpPow)
 // 穿透数等级档：5 级 ×2 / 10 级 ×3 / 15 级 ×4
 const levelPierceMul = level => level >= 15 ? 4 : level >= 10 ? 3 : level >= 5 ? 2 : 1;
 // Boss：持枪远程（无碰撞伤害），视野 = 所持武器射程，移速缓慢；攻击节奏 = 开火 burstMs / 停火 restMs 交替
-const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2, burstMs: 3000, restMs: 2000,
+const BOSS    = { r: 32, hp: 450, speed: 40, spawnEveryMs: 25000, cap: 3, burstMs: 3000, restMs: 2000,
   knockback: 10, stunMs: 750 }; // 体型重击退小；被命中停火僵持
 const ROOM    = { maxPlayers: 4, codeLen: 4 };
 
@@ -306,6 +326,7 @@ function pickBossSpawn(spawns, bosses, players) {
 
 return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, PATH_CELL,
   WAVE, waveCount, waveHpMul, waveSpeedMul, waveXp, waveBossXp, waveWindupMs,
+  MONSTER_TYPES, pickMonsterType, ELITE,
   LEVELS, levelMul, shieldMax, xpNeed, levelPierceMul, monsterSpeedMul,
   dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
   chaseStep, regenStep, findPath, separate, pickFarthestSpawn, pickBossSpawn };

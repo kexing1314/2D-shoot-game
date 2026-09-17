@@ -130,8 +130,8 @@ function tick(room) {
         return false;
       }
       let dead = false;
-      // 命中玩家：仅 Boss 子弹打玩家（合作模式：玩家子弹穿过队友）；穿透至 maxHits 个目标后消失
-      if (b.boss) for (const p of room.players.values()) {
+      // 命中玩家：仅 Boss/怪物远程弹打玩家（合作模式：玩家子弹穿过队友）；穿透至 maxHits 个目标后消失
+      if (b.boss || b.mon) for (const p of room.players.values()) {
         if (p.id === b.owner || p.deadUntil) continue;
         if (G.dist(b.x, b.y, p.x, p.y) >= G.PLAYER.r + b.size) continue;
         b.hitIds = b.hitIds || [];
@@ -143,11 +143,12 @@ function tick(room) {
         if (b.hitIds.length >= (b.maxHits || 1)) { dead = true; break; }
       }
       if (dead) return false;
-      if (b.boss) continue; // Boss 子弹只打玩家，不打怪/其他 Boss（继续子步进）
+      if (b.boss || b.mon) continue; // Boss/怪物弹只打玩家，不打怪（继续子步进）
       // 命中怪物 / Boss
-      for (const [list, r, isBoss] of [[room.monsters, G.MONSTER.r, false], [room.bosses, G.BOSS.r, true]]) {
+      for (const [list, isBoss] of [[room.monsters, false], [room.bosses, true]]) {
         for (let i = list.length - 1; i >= 0; i--) {
           const m = list[i];
+          const r = isBoss ? G.BOSS.r : m.r;
           if (G.dist(b.x, b.y, m.x, m.y) >= r + b.size) continue;
           const tag = (isBoss ? 'b' : 'm') + m.id;
           b.hitIds = b.hitIds || [];
@@ -191,15 +192,29 @@ function tick(room) {
     const target = nearest(alive, m.x, m.y);
     const zd = target ? G.dist(m.x, m.y, target.x, target.y) : 0;
     // 赶路提速：远距 ×3 / 中距 ×2 / 近距离（视野×1.2）内原速，方便怪潮跨图追人
-    stepAlongPath(room, m, G.MONSTER.r, target, (m.speed || G.MONSTER.speed) * G.monsterSpeedMul(zd), dt, now, 500);
-    const reach = G.MONSTER.r + G.PLAYER.r + 6;
+    stepAlongPath(room, m, m.r, target, m.speed * G.monsterSpeedMul(zd), dt, now, 500);
+    // 喷吐怪：射程内朝目标吐慢速弹（怪物远程弹，只打玩家）
+    if (m.type === 'spitter' && target && now >= (m.nextShot || 0) && now >= (m.stunUntil || 0)) {
+      const T = G.MONSTER_TYPES.spitter;
+      const dsp = G.dist(m.x, m.y, target.x, target.y);
+      if (dsp <= T.range) {
+        m.nextShot = now + T.rateMs;
+        room.bullets.push({
+          id: ++eid, x: m.x, y: m.y,
+          vx: (target.x - m.x) / dsp * T.bulletSpeed, vy: (target.y - m.y) / dsp * T.bulletSpeed,
+          dmg: m.bulletDmg, size: 4, pierce: false, owner: null, mon: true,
+          range: T.range + 60, maxHits: 1, explode: 0, explodeDmg: 0,
+        });
+      }
+    }
+    const reach = m.r + G.PLAYER.r + 6;
     if (m.windupUntil) { // 前摇结束：仍在接触范围才结算伤害（躲开就落空）
       if (now >= m.windupUntil) {
         m.windupUntil = 0;
         m.nextHit = now + G.MONSTER.cooldownMs;
         if (target && now >= (m.stunUntil || 0) && G.dist(m.x, m.y, target.x, target.y) < reach + 4) {
           const dl = G.dist(m.x, m.y, target.x, target.y) || 1;
-          damagePlayer(room, target, G.MONSTER.dmg, null, now, m,
+          damagePlayer(room, target, m.dmg, null, now, m,
             { x: (target.x - m.x) / dl, y: (target.y - m.y) / dl }); // 击退沿怪→玩家
         }
       }
@@ -232,7 +247,7 @@ function tick(room) {
   // 4c. 碰撞体积：玩家×玩家、玩家×敌人互不可穿过，全部各退一半（双向互挡：怪顶玩家时玩家也顶不进去）
   for (let i = 0; i < alive.length; i++) {
     for (let j = i + 1; j < alive.length; j++) G.separate(alive[i], G.PLAYER.r, alive[j], G.PLAYER.r, room.walls, false);
-    for (const m of room.monsters) G.separate(m, G.MONSTER.r, alive[i], G.PLAYER.r, room.walls, false);
+    for (const m of room.monsters) G.separate(m, m.r, alive[i], G.PLAYER.r, room.walls, false);
     for (const bs2 of room.bosses) G.separate(bs2, G.BOSS.r, alive[i], G.PLAYER.r, room.walls, false);
   }
 
@@ -248,7 +263,10 @@ function tick(room) {
       room.wave++;
       const hm = G.waveHpMul(room.wave, room.diff), sm = G.waveSpeedMul(room.wave, room.diff);
       const n = G.waveCount(room.wave, room.diff);
-      for (let i = 0; i < n; i++) room.monsters.push(edgeSpawn(room.map, hm, sm));
+      for (let i = 0; i < n; i++) { // 类型混编 + 5% 精英
+        const type = G.pickMonsterType(room.wave, Math.random());
+        room.monsters.push(edgeSpawn(room.map, type, Math.random() < G.ELITE.chance, hm, sm));
+      }
       room.waveState = 'fight';
     }
     if (now - room.lastBoss >= G.BOSS.spawnEveryMs && room.bosses.length < G.BOSS.cap) {
@@ -356,6 +374,7 @@ function damageMonster(room, list, i, dmg, isBoss, killerId) {
     killer.kills++;
     grantXp(room, isBoss ? G.waveBossXp(room.wave, room.diff) : G.waveXp(room.wave, room.diff));
   }
+  if (m.elite) { const s = supplyDrop(room); s.x = m.x; s.y = m.y; room.pickups.push(s); } // 精英必掉补给
   if (isBoss) room.pickups.push({ id: ++eid, x: m.x, y: m.y, weapon: m.weapon });
 }
 
@@ -370,8 +389,9 @@ function boom(room, b, now) {
     damagePlayer(room, p, b.explodeDmg, b.owner, now, b, kd);
   }
   if (b.boss) return;
-  for (const [list, r, isBoss] of [[room.monsters, G.MONSTER.r, false], [room.bosses, G.BOSS.r, true]]) {
+  for (const [list, isBoss] of [[room.monsters, false], [room.bosses, true]]) {
     for (let i = list.length - 1; i >= 0; i--) {
+      const r = isBoss ? G.BOSS.r : list[i].r;
       if (G.dist(b.x, b.y, list[i].x, list[i].y) > b.explode + r) continue;
       damageMonster(room, list, i, b.explodeDmg, isBoss, b.owner);
     }
@@ -383,7 +403,7 @@ function dropWeapon() {
   return names[Math.floor(Math.random() * names.length)];
 }
 
-function edgeSpawn(map, hpMul = 1, speedMul = 1) {
+function edgeSpawn(map, type = 'normal', elite = false, hpMul = 1, speedMul = 1) {
   const m = 60; // 距边缘留白，避开 20px 边界墙
   const side = Math.floor(Math.random() * 4);
   const rx = () => m + Math.random() * (map.w - 2 * m);
@@ -392,7 +412,15 @@ function edgeSpawn(map, hpMul = 1, speedMul = 1) {
     : side === 1 ? { x: rx(), y: map.h - m }
     : side === 2 ? { x: m, y: ry() }
     : { x: map.w - m, y: ry() };
-  return { id: ++eid, x: pos.x, y: pos.y, hp: G.MONSTER.hp * hpMul, speed: G.MONSTER.speed * speedMul, nextHit: 0 };
+  const T = G.MONSTER_TYPES[type];
+  const em = elite ? G.ELITE : { hpMul: 1, dmgMul: 1, scaleMul: 1 };
+  return {
+    id: ++eid, x: pos.x, y: pos.y, type, elite: !!elite,
+    r: T.r * em.scaleMul, scale: T.scale * em.scaleMul,
+    hp: T.hp * hpMul * em.hpMul, speed: T.speed * speedMul, dmg: T.dmg * em.dmgMul,
+    bulletDmg: (T.bulletDmg || 0) * em.dmgMul,
+    nextHit: 0, nextShot: 0,
+  };
 }
 
 // 休息期补给：医疗包/弹药箱，随机空旷点（避墙重试 8 次）
@@ -443,9 +471,9 @@ function broadcastState(room, now) {
       respawnIn: p.deadUntil ? Math.max(1, Math.ceil((p.deadUntil - now) / 1000)) : 0,
     })),
     // 实体带 id：客户端按 id 匹配前后帧做插值与死亡/消失特效
-    monsters: room.monsters.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y), w: !!m.windupUntil })),
+    monsters: room.monsters.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y), w: !!m.windupUntil, t: m.type, e: !!m.elite })),
     bosses: room.bosses.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp), weapon: b.weapon })),
-    bullets: room.bullets.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss, boom: b.explode || 0 })), // boom = 爆炸半径（0 不爆），客户端冲击波圈与实际伤害范围一致
+    bullets: room.bullets.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss, mon: !!b.mon, boom: b.explode || 0 })), // boom = 爆炸半径（0 不爆），客户端冲击波圈与实际伤害范围一致
     pickups: room.pickups.map(pk => ({ id: pk.id, x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon, type: pk.type || 'weapon' })),
     // 可破坏墙（地图初始墙不可破坏、不广播；将来玩家放置墙走这里，被啃穿即从列表消失）
     walls: room.walls.filter(w => w.destructible).map(w => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h, hp: Math.round(w.hp) })),
