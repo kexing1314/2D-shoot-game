@@ -189,7 +189,9 @@ function tick(room) {
   const alive = [...room.players.values()].filter(p => !p.deadUntil);
   for (const m of room.monsters) {
     const target = nearest(alive, m.x, m.y);
-    stepAlongPath(room, m, G.MONSTER.r, target, m.speed || G.MONSTER.speed, dt, now, 500);
+    const zd = target ? G.dist(m.x, m.y, target.x, target.y) : 0;
+    // 赶路提速：远距 ×3 / 中距 ×2 / 近距离（视野×1.2）内原速，方便怪潮跨图追人
+    stepAlongPath(room, m, G.MONSTER.r, target, (m.speed || G.MONSTER.speed) * G.monsterSpeedMul(zd), dt, now, 500);
     const reach = G.MONSTER.r + G.PLAYER.r + 6;
     if (m.windupUntil) { // 前摇结束：仍在接触范围才结算伤害（躲开就落空）
       if (now >= m.windupUntil) {

@@ -72,14 +72,15 @@ game/
 
 ```js
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, pierce: false, size: 3, range: 600, mag: 12, reloadMs: 1500 },
-  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, pierce: false, size: 3, range: 500, mag: 40, reloadMs: 2600 },
-  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400, mag: 5, reloadMs: 2200 },
-  rocket:  { rate: 1500, dmg: 30, speed: 350, count: 1, pierce: false, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
+  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, pierce: 1, size: 3, range: 600, mag: 12, reloadMs: 1500 },
+  mg:      { rate: 100, dmg: 15, speed: 1500, count: 1, pierce: 2, size: 3, range: 500, mag: 40, reloadMs: 2600 },
+  shotgun: { rate: 600, dmg: 20, speed: 1500, count: 5, spread: 15, pierce: 3, size: 3, range: 400, mag: 5, reloadMs: 2200 },
+  rocket:  { rate: 1500, dmg: 30, speed: 1050, count: 1, pierce: 0, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
 }
 ```
 
 - 射击逻辑只写一次：读表生成子弹（count>1 时以射击方向为中心 ±spread 度扇形展开）
+- 子弹**子步进推进**：每 tick 按弹速拆成 ≤12px 的小步逐步做墙/实体判定——1500px/s 弹每 tick 飞 50px 大于命中窗口，不拆步会穿模漏判
 - pierce=true 的子弹穿过怪物和玩家不消失，撞墙才消失
 - range = 子弹最大飞行距离（px），飞满即消失；霰弹枪贴脸爆发
 - **火箭筒爆炸弹**（替代加农炮）：命中任何目标/撞墙/飞到终点都引爆，对半径 100px 内目标造成 50 点 AOE 伤害 + 沿爆心向外击退，不伤射手自己；直击目标吃 30 直击伤 + 50 AOE 叠加。单发弹匣 + 3s 换弹 = 大空窗平衡。Boss 持火箭筒时爆炸只伤玩家（与 Boss 子弹只打玩家一致）；boom 随子弹广播爆炸半径数值（0=不爆），客户端据此画橙色冲击波圈——扩散到恰好实际伤害半径后淡出（所见即所伤）+ 爆炸粒子
@@ -89,6 +90,7 @@ const WEAPONS = {
 ### 4.4 普通怪物
 
 - **波次怪潮刷怪**（合作化轮）：第 N 波一次刷 `waveCount = min(10+6N, 100)×难度` 只（第 1 波 16、第 10 波 70、封顶 100 同场）；清完休息 6 秒掉 2 个补给再下一波；怪 HP ×(1+0.12(N-1)×难度)、速度 ×(1+0.04·min(N-1,8))；怪经验 `10+3(N-1)`、Boss `100+20(N-1)`（×难度）；首波建房 3 秒后；难度 diff 存 room（菜单选项预留，数量/HP/经验函数全乘它）
+- **赶路速度分区**：与目标距离 > 1920px 速度 ×3、768–1920 ×2、≤768（=视野半宽 640×1.2，接战距离）恢复原速——怪潮跨图赶路不拖沓、贴脸压力不变
 - **近战前摇**：怪进入接触范围先进前摇（客户端红闪脉动预警圈，state.monsters.w 标记），前摇结束仍在接触才结算伤害、否则落空，之后 1s 冷却；前摇时长 `max(50, 700-(N-1)×50)` ms——第 1 波 0.7s 轻松躲、第 14 波起 50ms 贴到必中；前摇期间怪继续追
 - 行为：**A\* 网格寻路**（60px 格，每怪限流 0.5s 重算+id 错峰）追最近的玩家（60 px/s）——不可破坏墙绕路、可破坏墙挡路站定啃穿（`MONSTER.wallDmgPerSec=30`）；无路径才直线；碰撞造成 10 伤害，之后 1 秒攻击冷却
 - HP 50（默认手枪两发），死亡即消失

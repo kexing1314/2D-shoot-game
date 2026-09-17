@@ -76,6 +76,11 @@ assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
   assert.equal(G.levelPierceMul(15), 4);
   assert.equal(G.weaponFire('mg', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1', { pierceMul: 2 })[0].maxHits, 5); // 1+2×2
   assert.equal(G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1')[0].maxHits, 2);               // 1+1×1
+  // 赶路速度分区：近（≤768=视野半宽640×1.2）原速 / 中 ×2 / 远 ×3
+  assert.equal(G.monsterSpeedMul(100), 1);
+  assert.equal(G.monsterSpeedMul(768), 1);
+  assert.equal(G.monsterSpeedMul(1000), 2);
+  assert.equal(G.monsterSpeedMul(3000), 3);
   // 近战前摇：第 1 波 0.7s 可躲，第 14 波起 50ms 贴到必中
   assert.equal(G.waveWindupMs(1), 700);
   assert.equal(G.waveWindupMs(14), 50);

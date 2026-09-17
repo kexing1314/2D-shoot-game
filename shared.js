@@ -15,7 +15,10 @@ const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2
   panicBelow: 50, panicMul: 1.3, panicMs: 3000 };
 const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000,
   wallDmgPerSec: 30, // 啃可破坏墙每秒伤害
-  knockback: 20, stunMs: 750 }; // 被子弹命中的击退/僵持（不能接触攻击）
+  knockback: 20, stunMs: 750, // 被子弹命中的击退/僵持（不能接触攻击）
+  // 赶路速度分区：近距离（=视野半宽 640×1.2）内原速，中距 ×2，远距 ×3
+  zoneClose: 768, zoneMid: 1920, midMul: 2, farMul: 3 };
+const monsterSpeedMul = d => d <= MONSTER.zoneClose ? 1 : d <= MONSTER.zoneMid ? MONSTER.midMul : MONSTER.farMul;
 const PATH_CELL = 60;  // A* 网格边长（px）
 
 // 波次怪潮：数量/HP/经验全走函数，diff = 难度乘数（将来菜单选项传不同 diff，room 存一个数字）
@@ -303,7 +306,7 @@ function pickBossSpawn(spawns, bosses, players) {
 
 return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, PATH_CELL,
   WAVE, waveCount, waveHpMul, waveSpeedMul, waveXp, waveBossXp, waveWindupMs,
-  LEVELS, levelMul, shieldMax, xpNeed, levelPierceMul,
+  LEVELS, levelMul, shieldMax, xpNeed, levelPierceMul, monsterSpeedMul,
   dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
   chaseStep, regenStep, findPath, separate, pickFarthestSpawn, pickBossSpawn };
 });
