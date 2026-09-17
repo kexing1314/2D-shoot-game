@@ -365,6 +365,12 @@ function render() {
     ctx.globalAlpha = 0.3; ctx.fillStyle = '#ff5252';
     ctx.beginPath(); ctx.ellipse(m.x, m.y + 4, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
+    if (m0.w) { // 攻击前摇：红闪脉动预警圈
+      ctx.globalAlpha = 0.45 + 0.3 * Math.sin(t / 50);
+      ctx.strokeStyle = '#ff1744'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(m.x, m.y, G.MONSTER.r + 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
     const img = SPR.mon_stand;
     if (img && img.complete && img.width) {
       const bob = moving ? Math.sin(t / 60 + m0.id) * 1.5 : 0;
@@ -598,7 +604,8 @@ function statusBar(me) {
   const w = G.WEAPONS[me.weapon];
   if (w) {
     ctx.font = '12px sans-serif'; ctx.fillStyle = '#999';
-    ctx.fillText(`伤害 ${w.dmg}${w.count > 1 ? '×' + w.count : ''} · 射程 ${w.range}${w.pierce ? ' · 穿透' : ''}${w.explode ? ` · 爆炸 ${w.explodeDmg}` : ''}`,
+    const pn = Math.round((w.pierce || 0) * G.levelPierceMul(me.level));
+    ctx.fillText(`伤害 ${w.dmg}${w.count > 1 ? '×' + w.count : ''} · 射程 ${w.range}${pn ? ` · 穿透 ${pn}` : ''}${w.explode ? ` · 爆炸 ${w.explodeDmg}` : ''}`,
       tx + nameW + 10, y + 25);
   }
   ctx.font = '13px sans-serif'; ctx.fillStyle = '#ccc';

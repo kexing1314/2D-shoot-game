@@ -116,7 +116,7 @@ function tick(room) {
     const dir = now >= (p.fireStunUntil || 0) && now >= p.reloadUntil ? G.fireDir(p.keys) : null;
     if (dir) {
       const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id,
-        { rateMul: mul.rate, speedMul: mul.bulletSpeed, dmgMul: mul.dmg });
+        { rateMul: mul.rate, speedMul: mul.bulletSpeed, dmgMul: mul.dmg, pierceMul: G.levelPierceMul(p.level) });
       if (bs) { p.ammo--; p.lastFire = now; p.face = dir; for (const x of bs) x.id = ++eid; room.bullets.push(...bs); }
     }
   }
@@ -127,20 +127,17 @@ function tick(room) {
       if (b.explode) boom(room, b, now);
       return false;
     }
-    // 命中玩家：仅 Boss 子弹打玩家（合作模式：玩家子弹穿过队友）
+    // 命中玩家：仅 Boss 子弹打玩家（合作模式：玩家子弹穿过队友）；穿透至 maxHits 个目标后消失
     if (b.boss) for (const p of room.players.values()) {
       if (p.id === b.owner || p.deadUntil) continue;
       if (G.dist(b.x, b.y, p.x, p.y) >= G.PLAYER.r + b.size) continue;
-      if (b.pierce) {
-        b.hitIds = b.hitIds || [];
-        if (b.hitIds.includes(p.id)) continue;
-        b.hitIds.push(p.id);
-        damagePlayer(room, p, b.dmg, b.owner, now, b);
-      } else {
-        damagePlayer(room, p, b.dmg, b.owner, now, b);
-        if (b.explode) boom(room, b, now); // 爆炸弹命中即爆（直击伤 + AOE 叠加）
-        return false;
-      }
+      b.hitIds = b.hitIds || [];
+      if (b.hitIds.includes(p.id)) continue;
+      b.hitIds.push(p.id);
+      const bl = Math.hypot(b.vx, b.vy) || 1;
+      damagePlayer(room, p, b.dmg, b.owner, now, b, { x: b.vx / bl, y: b.vy / bl }); // 击退沿弹速向量
+      if (b.explode) { boom(room, b, now); return false; } // 爆炸弹命中即爆（直击伤 + AOE 叠加）
+      if (b.hitIds.length >= (b.maxHits || 1)) return false;
     }
     if (b.boss) return true; // Boss 子弹只打玩家，不打怪/其他 Boss
     // 命中怪物 / Boss
@@ -149,11 +146,9 @@ function tick(room) {
         const m = list[i];
         if (G.dist(b.x, b.y, m.x, m.y) >= r + b.size) continue;
         const tag = (isBoss ? 'b' : 'm') + m.id;
-        if (b.pierce) {
-          b.hitIds = b.hitIds || [];
-          if (b.hitIds.includes(tag)) continue;
-          b.hitIds.push(tag);
-        }
+        b.hitIds = b.hitIds || [];
+        if (b.hitIds.includes(tag)) continue;
+        b.hitIds.push(tag);
         damageMonster(room, list, i, b.dmg, isBoss, b.owner);
         if (m.hp > 0) { // 命中未死：击退 + 僵持（玩家打怪同样的控制，可风筝）
           const kb = isBoss ? G.BOSS.knockback : G.MONSTER.knockback;
@@ -163,10 +158,8 @@ function tick(room) {
           m.x = mk.x; m.y = mk.y;
           m.stunUntil = now + (isBoss ? G.BOSS.stunMs : G.MONSTER.stunMs);
         }
-        if (!b.pierce) {
-          if (b.explode) boom(room, b, now);
-          return false;
-        }
+        if (b.explode) { boom(room, b, now); return false; }
+        if (b.hitIds.length >= (b.maxHits || 1)) return false; // 穿透额度用完
       }
     }
     return true;
@@ -190,9 +183,19 @@ function tick(room) {
   for (const m of room.monsters) {
     const target = nearest(alive, m.x, m.y);
     stepAlongPath(room, m, G.MONSTER.r, target, m.speed || G.MONSTER.speed, dt, now, 500);
-    if (target && now >= m.nextHit && now >= (m.stunUntil || 0) && G.dist(m.x, m.y, target.x, target.y) < G.MONSTER.r + G.PLAYER.r) {
-      damagePlayer(room, target, G.MONSTER.dmg, null, now, m);
-      m.nextHit = now + G.MONSTER.cooldownMs;
+    const reach = G.MONSTER.r + G.PLAYER.r + 6;
+    if (m.windupUntil) { // 前摇结束：仍在接触范围才结算伤害（躲开就落空）
+      if (now >= m.windupUntil) {
+        m.windupUntil = 0;
+        m.nextHit = now + G.MONSTER.cooldownMs;
+        if (target && now >= (m.stunUntil || 0) && G.dist(m.x, m.y, target.x, target.y) < reach + 4) {
+          const dl = G.dist(m.x, m.y, target.x, target.y) || 1;
+          damagePlayer(room, target, G.MONSTER.dmg, null, now, m,
+            { x: (target.x - m.x) / dl, y: (target.y - m.y) / dl }); // 击退沿怪→玩家
+        }
+      }
+    } else if (target && now >= m.nextHit && now >= (m.stunUntil || 0) && G.dist(m.x, m.y, target.x, target.y) < reach) {
+      m.windupUntil = now + G.waveWindupMs(room.wave, room.diff); // 进前摇（客户端红闪预警）
     }
   }
   // 4b. Boss：同样绕路追击；玩家进入所持武器射程（= 视野）内则朝其精确角度开火
@@ -215,6 +218,13 @@ function tick(room) {
       for (const s of shots) { s.boss = true; s.id = ++eid; }
       room.bullets.push(...shots);
     }
+  }
+
+  // 4c. 碰撞体积：玩家×玩家、玩家×敌人互不可穿过（圆-圆推开，带撞墙检测）
+  for (let i = 0; i < alive.length; i++) {
+    for (let j = i + 1; j < alive.length; j++) G.separate(alive[i], G.PLAYER.r, alive[j], G.PLAYER.r, room.walls, false);
+    for (const m of room.monsters) G.separate(m, G.MONSTER.r, alive[i], G.PLAYER.r, room.walls, true);
+    for (const bs2 of room.bosses) G.separate(bs2, G.BOSS.r, alive[i], G.PLAYER.r, room.walls, true);
   }
 
   // 5. 波次怪潮：清完进休息（掉补给）→ 到点下一波（数量/HP/速度随波次+难度缩放）；Boss 仍定时
@@ -259,7 +269,8 @@ function respawn(room, p, now) {
 }
 
 // src = 伤害来源位置（子弹/怪物），用于击退方向；缺省不击退
-function damagePlayer(room, p, dmg, attackerId, now, src) {
+// src = 伤害来源位置（爆炸沿爆心放射击退）；dir = 击退方向单位向量（子弹=弹速向量、近战=攻击者→受击者，严格反向）
+function damagePlayer(room, p, dmg, attackerId, now, src, dir) {
   if (p.deadUntil) return; // 已死亡玩家不再受伤（防止同tick多怪重复计死亡）
   let d = dmg;
   const hadShield = p.shield > 0;
@@ -269,13 +280,16 @@ function damagePlayer(room, p, dmg, attackerId, now, src) {
   p.hp -= d;
   p.lastDamagedAt = now;
   p.fireStunUntil = now + (shielded ? G.PLAYER.stunShieldedMs : G.PLAYER.stunMs); // 僵持：暂停射击（移动不受影响）
-  if (src) {
-    // 击退：沿 src→玩家 方向推（盾没碎减半），撞墙检测（打不进墙）
+  if (src || dir) {
+    // 击退：严格沿受击方向反向（dir 优先；爆炸无 dir 时沿爆心→玩家放射），盾没碎减半，撞墙检测（打不进墙）
     const kb = shielded ? G.PLAYER.knockbackShielded : G.PLAYER.knockback;
-    const d = G.dist(src.x, src.y, p.x, p.y) || 1;
-    const m = G.moveWithWalls(p.x, p.y,
-      (p.x - src.x) / d * kb, (p.y - src.y) / d * kb,
-      G.PLAYER.r, room.walls);
+    let ux, uy;
+    if (dir) { ux = dir.x; uy = dir.y; }
+    else {
+      const d = G.dist(src.x, src.y, p.x, p.y) || 1;
+      ux = (p.x - src.x) / d; uy = (p.y - src.y) / d;
+    }
+    const m = G.moveWithWalls(p.x, p.y, ux * kb, uy * kb, G.PLAYER.r, room.walls);
     p.x = m.x; p.y = m.y;
   }
   if (p.hp > 0) {
@@ -418,7 +432,7 @@ function broadcastState(room, now) {
       respawnIn: p.deadUntil ? Math.max(1, Math.ceil((p.deadUntil - now) / 1000)) : 0,
     })),
     // 实体带 id：客户端按 id 匹配前后帧做插值与死亡/消失特效
-    monsters: room.monsters.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y) })),
+    monsters: room.monsters.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y), w: !!m.windupUntil })),
     bosses: room.bosses.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp), weapon: b.weapon })),
     bullets: room.bullets.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss, boom: b.explode || 0 })), // boom = 爆炸半径（0 不爆），客户端冲击波圈与实际伤害范围一致
     pickups: room.pickups.map(pk => ({ id: pk.id, x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon, type: pk.type || 'weapon' })),

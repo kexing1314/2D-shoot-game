@@ -26,6 +26,8 @@ const waveHpMul    = (wave, diff = 1) => 1 + (wave - 1) * WAVE.hpPerWave * diff;
 const waveSpeedMul = (wave, diff = 1) => 1 + Math.min(wave - 1, WAVE.speedCapWaves) * WAVE.speedPerWave;
 const waveXp       = (wave, diff = 1) => Math.round((10 + (wave - 1) * 3) * diff);
 const waveBossXp   = (wave, diff = 1) => Math.round((100 + (wave - 1) * 20) * diff);
+// 近战前摇：第 1 波 0.7s 轻松躲，第 14 波起 50ms 贴到必中
+const waveWindupMs = (wave, diff = 1) => Math.max(50, 700 - (wave - 1) * 50);
 
 // 等级：上限 15，~30 分钟满级；p=进度，六属性倍率（将来加属性只改 levelMul）
 // 满级：移速/伤害/护盾/弹速 ×2，换弹 ×2 快，射速 ×3
@@ -37,6 +39,8 @@ const levelMul = level => {
 };
 const shieldMax = level => LEVELS.shieldBase * levelMul(level).shield;
 const xpNeed = level => Math.round(LEVELS.xpBase * Math.pow(level, LEVELS.xpPow));
+// 穿透数等级档：5 级 ×2 / 10 级 ×3 / 15 级 ×4
+const levelPierceMul = level => level >= 15 ? 4 : level >= 10 ? 3 : level >= 5 ? 2 : 1;
 // Boss：持枪远程（无碰撞伤害），视野 = 所持武器射程，移速缓慢；攻击节奏 = 开火 burstMs / 停火 restMs 交替
 const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2, burstMs: 3000, restMs: 2000,
   knockback: 10, stunMs: 750 }; // 体型重击退小；被命中停火僵持
@@ -44,12 +48,13 @@ const ROOM    = { maxPlayers: 4, codeLen: 4 };
 
 // 武器表：加武器 = 加一行；射击逻辑只读这张表。range = 子弹最大飞行距离（px）
 // explode = 爆炸半径（0 不爆），explodeDmg = 爆炸 AOE 伤害：命中任何目标/撞墙/飞到终点都引爆
+// pierce = 基础穿透数（子弹可命中 1 + pierce×等级倍率 个目标后消失；0 = 命中即消失）
 // mag = 弹匣容量，reloadMs = 换弹时长（打空自动换弹 / R 键手动，期间不能开火）
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, spread: 0,  pierce: false, size: 3, range: 600, mag: 12, reloadMs: 1500 },
-  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, spread: 0,  pierce: false, size: 3, range: 500, mag: 40, reloadMs: 2600 },
-  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: false, size: 3, range: 400, mag: 5,  reloadMs: 2200 },
-  rocket:  { rate: 1500, dmg: 30, speed: 350, count: 1, spread: 0, pierce: false, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
+  pistol:  { rate: 300, dmg: 25, speed: 500, count: 1, spread: 0,  pierce: 1, size: 3, range: 600, mag: 12, reloadMs: 1500 },
+  mg:      { rate: 100, dmg: 15, speed: 500, count: 1, spread: 0,  pierce: 2, size: 3, range: 500, mag: 40, reloadMs: 2600 },
+  shotgun: { rate: 600, dmg: 20, speed: 500, count: 5, spread: 15, pierce: 3, size: 3, range: 400, mag: 5,  reloadMs: 2200 },
+  rocket:  { rate: 1500, dmg: 30, speed: 350, count: 1, spread: 0, pierce: 0, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
 };
 
 const COLORS = ['#4a9eff', '#ff9f43', '#2ecc71', '#e84393'];
@@ -157,6 +162,7 @@ function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner, opts) {
       x, y,
       vx: Math.cos(a) * w.speed * (o.speedMul || 1), vy: Math.sin(a) * w.speed * (o.speedMul || 1),
       dmg: w.dmg * (o.dmgMul || 1), size: w.size, pierce: w.pierce, owner, range: w.range,
+      maxHits: 1 + Math.round((w.pierce || 0) * (o.pierceMul || 1)), // 可命中目标数（穿透）
       explode: w.explode || 0, explodeDmg: w.explodeDmg || 0,
     });
   }
@@ -264,6 +270,22 @@ function findPath(walls, map, sx, sy, tx, ty, cell) {
   return null;
 }
 
+// 圆-圆推开：重叠则沿圆心线推到 minD  apart；aOnly=只推 a（敌人被玩家挡住滑行），否则各退一半；带撞墙检测
+function separate(a, rA, b, rB, walls, aOnly) {
+  const minD = rA + rB;
+  let d = dist(a.x, a.y, b.x, b.y);
+  if (d >= minD) return;
+  if (d < 0.01) { d = 0.01; a.x += 0.5; }
+  const ux = (a.x - b.x) / d, uy = (a.y - b.y) / d;
+  const push = minD - d;
+  const ma = moveWithWalls(a.x, a.y, ux * push * (aOnly ? 1 : 0.5), uy * push * (aOnly ? 1 : 0.5), rA, walls);
+  a.x = ma.x; a.y = ma.y;
+  if (!aOnly) {
+    const mb = moveWithWalls(b.x, b.y, -ux * push * 0.5, -uy * push * 0.5, rB, walls);
+    b.x = mb.x; b.y = mb.y;
+  }
+}
+
 function pickFarthestSpawn(spawns, others) {
   let best = spawns[0], bestD = -1;
   for (const s of spawns) {
@@ -280,8 +302,8 @@ function pickBossSpawn(spawns, bosses, players) {
 }
 
 return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, PATH_CELL,
-  WAVE, waveCount, waveHpMul, waveSpeedMul, waveXp, waveBossXp,
-  LEVELS, levelMul, shieldMax, xpNeed,
+  WAVE, waveCount, waveHpMul, waveSpeedMul, waveXp, waveBossXp, waveWindupMs,
+  LEVELS, levelMul, shieldMax, xpNeed, levelPierceMul,
   dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
-  chaseStep, regenStep, findPath, pickFarthestSpawn, pickBossSpawn };
+  chaseStep, regenStep, findPath, separate, pickFarthestSpawn, pickBossSpawn };
 });
