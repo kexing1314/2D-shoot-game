@@ -589,6 +589,8 @@ function statusBar(me) {
   const smax = G.shieldMax(me.level);
   ctx.fillStyle = '#222'; ctx.fillRect(hx, hy - 8, hw, 5);
   ctx.fillStyle = '#4a9eff'; ctx.fillRect(hx, hy - 8, hw * clamp(me.shield / smax, 0, 1), 5);
+  ctx.fillStyle = '#9ecdf5'; ctx.font = '10px sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText(`盾 ${Math.round(me.shield)}/${smax}`, hx + hw + 8, hy - 3); // 护盾数值
   ctx.fillStyle = '#333'; ctx.fillRect(hx, hy, hw, hh);
   ctx.fillStyle = frac > 0.5 ? '#2ecc71' : frac > 0.25 ? '#f1c40f' : '#e74c3c';
   ctx.fillRect(hx, hy, hw * frac, hh);
