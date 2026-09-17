@@ -158,29 +158,20 @@ function targetAngle(stable, o, x, y, threshold) {
   return null;
 }
 
-// —— 人物精灵（LPC 艺术家像素，CC-BY-SA 3.0/GPL3，署名见 assets/lpc/LPC-CREDITS.md）——
-// 表布局：4 行方向 [下,左,上,右] × 9 帧走路循环；槽位 = COLORS 下标
-const LPC = {};
-for (let c = 0; c < 4; c++) { const im = new Image(); im.src = 'assets/lpc/char' + c + '.png'; LPC[c] = im; }
-const LPC_MON = new Image(); LPC_MON.src = 'assets/lpc/mon.png';
-const LPC_BOSS = new Image(); LPC_BOSS.src = 'assets/lpc/boss.png';
-// 瞄准/移动角 → 方向行（45° 四分）
-function lpcRow(ang) {
-  const d = ang * 180 / Math.PI;
-  if (d > -45 && d <= 45) return 3;      // 右
-  if (d > 45 && d <= 135) return 0;      // 下
-  if (d > -135 && d <= -45) return 2;    // 上
-  return 1;                              // 左
+// —— 人物精灵（Kenney Top-down Shooter，CC0；纯俯视，旋转即任意朝向）——
+// 槽位 = COLORS 下标；姿势：hold 待命 / gun 手枪 / machine 长枪 / reload 换弹
+const SPR = {};
+for (let c = 0; c < 4; c++) for (const pose of ['hold', 'gun', 'machine', 'reload']) {
+  const im = new Image();
+  im.src = 'assets/char' + c + '_' + pose + '.png';
+  SPR[c + '_' + pose] = im;
 }
-// 画一张 LPC 表：frame 走路帧、row 方向行、scale 缩放；锚点 = 脚底居中
-function drawLpc(img, row, frame, x, y, scale) {
-  if (!img || !img.complete || !img.width) return false;
-  const s = 64 * scale;
-  ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(img, frame * 64, row * 64, 64, 64, x - s / 2, y + 16 * scale - s * 0.88, s, s);
-  ctx.imageSmoothingEnabled = true;
-  return true;
+for (const k of ['mon_stand', 'boss_hold', 'boss_machine']) {
+  const im = new Image();
+  im.src = 'assets/' + k + '.png';
+  SPR[k] = im;
 }
+const POSE_BY_WEAPON = { pistol: 'gun', mg: 'machine', shotgun: 'machine', rocket: 'machine' };
 
 // 状态 diff → 推测事件放粒子（子弹消失≈命中/撞墙，客户端不区分，火花一样小）
 function detect(p0, s) {
@@ -380,8 +371,18 @@ function render() {
       ctx.beginPath(); ctx.arc(m.x, m.y, G.MONSTER.r + 8, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    const mframe = moving ? Math.floor(t / 90 + m0.id) % 9 : 0;
-    if (!drawLpc(LPC_MON, lpcRow(ang), mframe, m.x, m.y, 0.9)) {
+    const img = SPR.mon_stand;
+    if (img && img.complete && img.width) {
+      const bob = moving ? Math.sin(t / 60 + m0.id) * 1.5 : 0;
+      ctx.save();
+      ctx.translate(m.x + Math.cos(ang) * bob, m.y + Math.sin(ang) * bob);
+      ctx.rotate(ang);
+      ctx.imageSmoothingEnabled = false;
+      const S = 0.9;
+      ctx.drawImage(img, -img.width * S / 2, -img.height * S / 2, img.width * S, img.height * S);
+      ctx.restore();
+      ctx.imageSmoothingEnabled = true;
+    } else {
       triPath(m.x, m.y, G.MONSTER.r);
       ctx.fillStyle = '#ff5252'; ctx.fill();
     }
@@ -399,16 +400,17 @@ function render() {
     ctx.globalAlpha = 0.25; ctx.fillStyle = '#9b59b6';
     ctx.beginPath(); ctx.ellipse(b.x, b.y + 8, 36, 22, 0, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1;
-    const bframe = moving ? Math.floor(t / 110 + b0.id) % 9 : 0;
-    if (drawLpc(LPC_BOSS, lpcRow(ang), bframe, b.x, b.y, 1.6)) {
-      ctx.save(); // Boss 持枪旋转叠画
-      ctx.translate(b.x, b.y - 10);
+    const img = SPR.boss_machine;
+    if (img && img.complete && img.width) {
+      const bob = moving ? Math.sin(t / 80 + b0.id) * 1.5 : 0;
+      ctx.save();
+      ctx.translate(b.x + Math.cos(ang) * bob, b.y + Math.sin(ang) * bob);
       ctx.rotate(ang);
-      ctx.fillStyle = '#33383f';
-      ctx.fillRect(10, -3, 26, 6);
-      ctx.fillStyle = '#787f88';
-      ctx.fillRect(10, -3, 26, 2);
+      ctx.imageSmoothingEnabled = false;
+      const S = 2.0;
+      ctx.drawImage(img, -img.width * S / 2, -img.height * S / 2, img.width * S, img.height * S);
       ctx.restore();
+      ctx.imageSmoothingEnabled = true;
     } else {
       const gr = ctx.createRadialGradient(b.x - 10, b.y - 10, 4, b.x, b.y, G.BOSS.r);
       gr.addColorStop(0, '#d7bde2'); gr.addColorStop(1, '#7d3c98');
@@ -458,20 +460,20 @@ function render() {
       ctx.globalAlpha = 1;
     }
     const slot = Math.max(0, G.COLORS.indexOf(p0.color));
-    const moving = oPrev && Math.abs(p.x - oPrev.x) + Math.abs(p.y - oPrev.y) > 0.3;
-    const rec = (recoil.get(p0.id) || 0) > t ? 3 : 0;            // 后坐：沿瞄准反方向退 3px
-    const bx = p.x - Math.cos(ang) * rec, by = p.y - Math.sin(ang) * rec;
-    const frame = moving ? Math.floor(t / 90) % 9 : 0;
-    if (drawLpc(LPC[slot], lpcRow(ang), frame, bx, by, 1.0)) {
-      // 枪：旋转叠画在手部（身体四向帧 + 枪 8 向瞄准）
+    const pose = p0.reloading ? 'reload' : (p0.face ? (POSE_BY_WEAPON[p0.weapon] || 'gun') : 'hold');
+    const img = SPR[slot + '_' + pose];
+    if (img && img.complete && img.width) {
+      const rec = (recoil.get(p0.id) || 0) > t ? 3 : 0;          // 后坐：沿瞄准反方向退 3px
+      const moving = oPrev && Math.abs(p.x - oPrev.x) + Math.abs(p.y - oPrev.y) > 0.3;
+      const bob = moving ? Math.sin(t / 70) * 1.5 : 0;           // 走路颠簸（素材无走路帧，用它代步态）
       ctx.save();
-      ctx.translate(bx, by - 6);
+      ctx.translate(p.x + Math.cos(ang) * (bob - rec), p.y + Math.sin(ang) * (bob - rec));
       ctx.rotate(ang);
-      ctx.fillStyle = '#33383f';
-      ctx.fillRect(6, -2, 16, 4);
-      ctx.fillStyle = '#787f88';
-      ctx.fillRect(6, -2, 16, 1);
+      ctx.imageSmoothingEnabled = false;                          // 像素风保持锐利
+      const S = 1.0;
+      ctx.drawImage(img, -img.width * S / 2, -img.height * S / 2, img.width * S, img.height * S);
       ctx.restore();
+      ctx.imageSmoothingEnabled = true;
     } else { // 精灵未加载完的回退：旧渐变球
       const gr = ctx.createRadialGradient(p.x - 5, p.y - 5, 2, p.x, p.y, G.PLAYER.r);
       gr.addColorStop(0, '#ffffff'); gr.addColorStop(1, p0.color);
