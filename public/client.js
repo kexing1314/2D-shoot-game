@@ -82,6 +82,14 @@ for (const k of ['grass', 'dirt', 'ice', 'clay']) {
 }
 const floorPat = {};             // 地砖 canvas pattern 缓存
 
+// 墙材质随地图主题：主体/描边/高光/细节纹（细节按墙坐标种子画，稳定不闪）
+const WALL_STYLE = {
+  grass: { fill: '#5c6b52', edge: '#39462f', hi: '#7d9070', detail: 'seam' },  // 苔石+石缝
+  dirt:  { fill: '#c9a15f', edge: '#8a6a35', hi: '#e0be82', detail: 'crack' }, // 砂岩+裂纹
+  ice:   { fill: '#a8cdd6', edge: '#6f97a3', hi: '#e6f4f7', detail: 'crack' }, // 冰块+冰裂
+  clay:  { fill: '#b0763f', edge: '#6f4a26', hi: '#cf9459', detail: 'pit' },   // 土坯+土坑
+};
+
 // 静态墙（地图模板）+ 服务器广播的可破坏墙；被啃穿的墙从 state 列表消失即不再画
 function allWalls() {
   return state && state.walls && state.walls.length ? curMap.walls.concat(state.walls) : curMap.walls;
@@ -247,15 +255,49 @@ function render() {
   }
   drawProps();
 
-  // 墙（sample 画风：深灰主体 + 橙色粗描边 + 内暗面；可破坏墙 = 木箱色）
+  // 墙：材质随地图主题（苔石/砂岩/冰块/土坯）；可破坏墙恒为木箱色（"摆上去的东西"）
   for (const w of allWalls()) {
     if (!inView(w.x + w.w / 2, w.y + w.h / 2, Math.max(w.w, w.h) / 2)) continue;
-    ctx.fillStyle = w.destructible ? '#a9743f' : '#3f4145';
+    if (w.destructible) {
+      ctx.fillStyle = '#a9743f';
+      ctx.fillRect(w.x, w.y, w.w, w.h);
+      ctx.strokeStyle = '#7d5426'; ctx.lineWidth = 6;
+      ctx.strokeRect(w.x + 3, w.y + 3, w.w - 6, w.h - 6);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillRect(w.x + 8, w.y + 8, Math.max(0, w.w - 16), Math.max(0, w.h - 16));
+      continue;
+    }
+    const st = WALL_STYLE[curMap.floor] || WALL_STYLE.grass;
+    ctx.fillStyle = st.fill;
     ctx.fillRect(w.x, w.y, w.w, w.h);
-    ctx.strokeStyle = w.destructible ? '#7d5426' : '#e8722a'; ctx.lineWidth = 6;
-    ctx.strokeRect(w.x + 3, w.y + 3, w.w - 6, w.h - 6);
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.fillRect(w.x + 8, w.y + 8, Math.max(0, w.w - 16), Math.max(0, w.h - 16));
+    ctx.strokeStyle = st.edge; ctx.lineWidth = 4;
+    ctx.strokeRect(w.x + 2, w.y + 2, w.w - 4, w.h - 4);
+    ctx.strokeStyle = st.hi; ctx.lineWidth = 2;   // 左上受光边
+    ctx.beginPath();
+    ctx.moveTo(w.x + 5, w.y + w.h - 6); ctx.lineTo(w.x + 5, w.y + 5); ctx.lineTo(w.x + w.w - 6, w.y + 5);
+    ctx.stroke();
+    // 主题细节纹（种子 = 墙坐标）
+    ctx.strokeStyle = st.edge; ctx.fillStyle = st.edge;
+    ctx.globalAlpha = 0.35; ctx.lineWidth = 2;
+    const sd = w.x * 7 + w.y * 13;
+    if (st.detail === 'seam') {
+      for (let y = w.y + 18 + (sd % 8); y < w.y + w.h - 6; y += 24) {
+        ctx.beginPath(); ctx.moveTo(w.x + 6, y); ctx.lineTo(w.x + w.w - 6, y); ctx.stroke();
+      }
+    } else if (st.detail === 'crack') {
+      ctx.beginPath();
+      ctx.moveTo(w.x + 8 + (sd % 12), w.y + 6);
+      ctx.lineTo(w.x + w.w * 0.5, w.y + w.h * 0.5);
+      ctx.lineTo(w.x + w.w - 8 - (sd % 10), w.y + w.h - 6);
+      ctx.stroke();
+    } else {
+      for (let i = 0; i < 3; i++) {
+        const px = w.x + 10 + ((sd >> (i * 3)) % Math.max(1, w.w - 20));
+        const py = w.y + 10 + ((sd >> (i * 5)) % Math.max(1, w.h - 20));
+        ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
   }
   // 拾取物（旋转金方块 + 脉冲光环）
   for (const pk of state.pickups) {
@@ -560,7 +602,7 @@ function minimap() {
 
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.fillRect(ox, oy, mw, mh);
-  ctx.fillStyle = '#3d4a6b';
+  ctx.fillStyle = (WALL_STYLE[curMap.floor] || WALL_STYLE.grass).edge; // 小地图墙色跟主题
   for (const w of allWalls()) ctx.fillRect(ox + w.x * sx, oy + w.y * sy, Math.max(1, w.w * sx), Math.max(1, w.h * sy));
   ctx.fillStyle = '#ffd700';
   for (const pk of state.pickups) dot(pk.x, pk.y, 1.5);
