@@ -43,7 +43,10 @@ const PATH_CELL = 60;  // A* 网格边长（px）
 
 // 波次怪潮：数量/HP/经验全走函数，diff = 难度乘数（将来菜单选项传不同 diff，room 存一个数字）
 const WAVE = { baseCount: 14, perWave: 8, maxCount: 100, hpPerWave: 0.18,
-  speedPerWave: 0.04, speedCapWaves: 8, restMs: 4000, firstDelayMs: 3000, suppliesPerRest: 2 };
+  speedPerWave: 0.04, speedCapWaves: 8, restMs: 4000, firstDelayMs: 3000, suppliesPerRest: 2,
+  bothSideWaves: 3 }; // 前 3 波只从左右两侧刷（边索引 2/3），第 4 波起四周全开
+// 刷怪边池：0 上 1 下 2 左 3 右
+const spawnSides = wave => wave <= WAVE.bothSideWaves ? [2, 3] : [0, 1, 2, 3];
 const waveCount    = (wave, diff = 1) => Math.min(Math.round((WAVE.baseCount + WAVE.perWave * wave) * diff), WAVE.maxCount);
 const waveHpMul    = (wave, diff = 1) => 1 + (wave - 1) * WAVE.hpPerWave * diff;
 const waveSpeedMul = (wave, diff = 1) => 1 + Math.min(wave - 1, WAVE.speedCapWaves) * WAVE.speedPerWave;
@@ -326,7 +329,7 @@ function pickBossSpawn(spawns, bosses, players) {
 
 return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, PATH_CELL,
   WAVE, waveCount, waveHpMul, waveSpeedMul, waveXp, waveBossXp, waveWindupMs,
-  MONSTER_TYPES, pickMonsterType, ELITE,
+  MONSTER_TYPES, pickMonsterType, ELITE, spawnSides,
   LEVELS, levelMul, shieldMax, xpNeed, levelPierceMul, monsterSpeedMul,
   dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
   chaseStep, regenStep, findPath, separate, pickFarthestSpawn, pickBossSpawn };

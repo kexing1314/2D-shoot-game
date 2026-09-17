@@ -93,6 +93,10 @@ assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
   assert.equal(G.pickMonsterType(5, 0.35), 'spitter');
   assert.equal(G.pickMonsterType(5, 0.9), 'normal');
   assert.equal(G.ELITE.chance, 0.05);
+  // 刷怪边：前 3 波左右两侧，第 4 波起四周
+  assert.deepEqual(G.spawnSides(1), [2, 3]);
+  assert.deepEqual(G.spawnSides(3), [2, 3]);
+  assert.deepEqual(G.spawnSides(4), [0, 1, 2, 3]);
   assert.ok(G.MONSTER_TYPES.spitter.range === 500 && G.MONSTER_TYPES.brute.hp === 250);
   // 加压后的 Boss 参数
   assert.equal(G.BOSS.hp, 450);

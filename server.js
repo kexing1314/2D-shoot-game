@@ -265,7 +265,7 @@ function tick(room) {
       const n = G.waveCount(room.wave, room.diff);
       for (let i = 0; i < n; i++) { // 类型混编 + 5% 精英
         const type = G.pickMonsterType(room.wave, Math.random());
-        room.monsters.push(edgeSpawn(room.map, type, Math.random() < G.ELITE.chance, hm, sm));
+        room.monsters.push(edgeSpawn(room.map, type, Math.random() < G.ELITE.chance, hm, sm, room.wave));
       }
       room.waveState = 'fight';
     }
@@ -403,9 +403,10 @@ function dropWeapon() {
   return names[Math.floor(Math.random() * names.length)];
 }
 
-function edgeSpawn(map, type = 'normal', elite = false, hpMul = 1, speedMul = 1) {
+function edgeSpawn(map, type = 'normal', elite = false, hpMul = 1, speedMul = 1, wave = 99) {
   const m = 60; // 距边缘留白，避开 20px 边界墙
-  const side = Math.floor(Math.random() * 4);
+  const sides = G.spawnSides(wave); // 前期两侧、后期四周
+  const side = sides[Math.floor(Math.random() * sides.length)];
   const rx = () => m + Math.random() * (map.w - 2 * m);
   const ry = () => m + Math.random() * (map.h - 2 * m);
   const pos = side === 0 ? { x: rx(), y: m }
