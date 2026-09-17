@@ -394,6 +394,8 @@ wss.on('connection', ws => {
     } else if (m.t === 'input') {
       const p = ws.room && ws.room.players.get(ws.playerId);
       if (p) p.keys = pickKeys(m.keys);
+    } else if (m.t === 'ping') {
+      send(ws, { t: 'pong', ts: m.ts }); // 延迟测量回显，原样返回
     }
   });
   ws.on('close', () => leave(ws));

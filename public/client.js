@@ -4,9 +4,12 @@ const $ = id => document.getElementById(id);
 const wsUrl = () => (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host;
 
 let ws = null, myId = null, state = null, roomCode = '';
+let pingMs = 0;                // 网络延迟（ping/pong RTT 指数平滑）
+setInterval(() => { if (ws && ws.readyState === 1) ws.send(JSON.stringify({ t: 'ping', ts: Date.now() })); }, 2000);
 
 function go(msg) {
   $('msg').textContent = '';
+  pingMs = 0;
   ws = new WebSocket(wsUrl());
   ws.onopen = () => ws.send(JSON.stringify(msg));
   ws.onmessage = e => {
@@ -15,6 +18,10 @@ function go(msg) {
     else if (m.t === 'state') {
       if (state) detect(state, m);
       prev = state; state = m; recvTime = performance.now();
+    }
+    else if (m.t === 'pong') {
+      const rtt = Date.now() - m.ts;
+      pingMs = pingMs ? Math.round(pingMs * 0.7 + rtt * 0.3) : rtt;
     }
     else if (m.t === 'error') { ws.onclose = null; ws.close(); backToLobby(m.msg); }
   };
@@ -581,6 +588,14 @@ function drawHUD(me) {
   ctx.fillText('房间 ' + roomCode, canvas.width / 2, 20);
   // 雷达小地图（右上）
   minimap();
+  // 网络延迟：小地图正下方，绿/黄/红三档
+  if (pingMs) {
+    const mh = 200 * curMap.h / curMap.w;
+    ctx.textAlign = 'right';
+    ctx.font = '14px sans-serif';
+    ctx.fillStyle = pingMs < 60 ? '#2ecc71' : pingMs < 120 ? '#f1c40f' : '#e74c3c';
+    ctx.fillText(pingMs + ' ms', canvas.width - 10, 10 + mh + 18);
+  }
   // 底部状态栏（自己的血量/武器/K-D）
   statusBar(me);
   // 死亡遮罩
