@@ -154,11 +154,11 @@ function tick(room) {
           if (b.hitIds.includes(tag)) continue;
           b.hitIds.push(tag);
           damageMonster(room, list, i, b.dmg, isBoss, b.owner);
-          if (m.hp > 0) { // 命中未死：击退 + 僵持（玩家打怪同样的控制，可风筝）
+          if (m.hp > 0) { // 命中未死：击退 + 僵持（玩家打怪同样的控制，可风筝）；击退沿弹速向量（擦边命中也不横飞）
             const kb = isBoss ? G.BOSS.knockback : G.MONSTER.knockback;
             const mr = isBoss ? G.BOSS.r : G.MONSTER.r;
-            const dd = G.dist(b.x, b.y, m.x, m.y) || 1;
-            const mk = G.moveWithWalls(m.x, m.y, (m.x - b.x) / dd * kb, (m.y - b.y) / dd * kb, mr, room.walls);
+            const bl = Math.hypot(b.vx, b.vy) || 1;
+            const mk = G.moveWithWalls(m.x, m.y, b.vx / bl * kb, b.vy / bl * kb, mr, room.walls);
             m.x = mk.x; m.y = mk.y;
             m.stunUntil = now + (isBoss ? G.BOSS.stunMs : G.MONSTER.stunMs);
           }
