@@ -97,7 +97,7 @@ function tick(room) {
       const speed = G.PLAYER.speed * (now < (p.panicUntil || 0) ? G.PLAYER.panicMul : 1); // 低血加速
       const m = G.moveWithWalls(p.x, p.y,
         dx / l * speed * dt, dy / l * speed * dt,
-        G.PLAYER.r, room.map.walls);
+        G.PLAYER.r, room.walls);
       p.x = m.x; p.y = m.y;
     }
     G.regenStep(p, now, dt);
@@ -120,7 +120,7 @@ function tick(room) {
 
   // 2. 子弹：推进 + 命中（爆炸弹在射程耗尽/撞墙处引爆）
   room.bullets = room.bullets.filter(b => {
-    if (!G.bulletStep(b, dt, room.map)) {
+    if (!G.bulletStep(b, dt, room.view)) {
       if (b.explode) boom(room, b, now);
       return false;
     }
@@ -169,20 +169,20 @@ function tick(room) {
     return true;
   });
 
-  // 4a. 怪物：追最近的活人，接触伤害 + 冷却
+  // 4a. 怪物：A* 绕不可破坏墙追最近活人；可破坏墙挡路站定啃穿；接触伤害 + 冷却
   const alive = [...room.players.values()].filter(p => !p.deadUntil);
   for (const m of room.monsters) {
     const target = nearest(alive, m.x, m.y);
-    G.chaseStep(m, G.MONSTER.r, target, G.MONSTER.speed, dt, room.map.walls);
+    stepAlongPath(room, m, G.MONSTER.r, target, G.MONSTER.speed, dt, now, 500);
     if (target && now >= m.nextHit && G.dist(m.x, m.y, target.x, target.y) < G.MONSTER.r + G.PLAYER.r) {
       damagePlayer(room, target, G.MONSTER.dmg, null, now, m);
       m.nextHit = now + G.MONSTER.cooldownMs;
     }
   }
-  // 4b. Boss：缓慢追击；玩家进入所持武器射程（= 视野）内则朝其精确角度开火
+  // 4b. Boss：同样绕路追击；玩家进入所持武器射程（= 视野）内则朝其精确角度开火
   for (const bs of room.bosses) {
     const target = nearest(alive, bs.x, bs.y);
-    G.chaseStep(bs, G.BOSS.r, target, G.BOSS.speed, dt, room.map.walls);
+    stepAlongPath(room, bs, G.BOSS.r, target, G.BOSS.speed, dt, now, 600);
     if (!target) continue;
     const d = G.dist(bs.x, bs.y, target.x, target.y);
     if (d <= 0 || d > G.WEAPONS[bs.weapon].range) continue;
@@ -243,7 +243,7 @@ function damagePlayer(room, p, dmg, attackerId, now, src) {
     const d = G.dist(src.x, src.y, p.x, p.y) || 1;
     const m = G.moveWithWalls(p.x, p.y,
       (p.x - src.x) / d * G.PLAYER.knockback, (p.y - src.y) / d * G.PLAYER.knockback,
-      G.PLAYER.r, room.map.walls);
+      G.PLAYER.r, room.walls);
     p.x = m.x; p.y = m.y;
   }
   if (p.hp > 0) {
@@ -265,6 +265,27 @@ function damagePlayer(room, p, dmg, attackerId, now, src) {
   }
   p.weapon = 'pistol';
   p.ammo = G.WEAPONS.pistol.mag; p.reloadUntil = 0;
+}
+
+// 沿 A* 路径推进（限流重算 + id 错峰）；下一歩撞可破坏墙则站定啃墙（MONSTER.wallDmgPerSec，啃穿移除）
+function stepAlongPath(room, e, r, target, speed, dt, now, period) {
+  if (target && now >= (e.nextPath || 0)) {
+    e.nextPath = now + period + (e.id % 5) * 80;
+    e.path = G.findPath(room.walls, room.map, e.x, e.y, target.x, target.y, G.PATH_CELL);
+  }
+  if (e.path && e.path.length && G.dist(e.x, e.y, e.path[0].x, e.path[0].y) < G.PATH_CELL * 0.6) e.path.shift();
+  const wp = (e.path && e.path[0]) || target; // 无路径（全封死）才直线
+  if (!wp) return;
+  const d = G.dist(e.x, e.y, wp.x, wp.y) || 1;
+  const nx = (wp.x - e.x) / d * speed * dt, ny = (wp.y - e.y) / d * speed * dt;
+  const chew = room.walls.find(w => w.destructible && G.circleRectHit(e.x + nx, e.y + ny, r, w));
+  if (chew) {
+    chew.hp -= G.MONSTER.wallDmgPerSec * dt;
+    if (chew.hp <= 0) room.walls.splice(room.walls.indexOf(chew), 1);
+    return;
+  }
+  const m = G.moveWithWalls(e.x, e.y, nx, ny, r, room.walls);
+  e.x = m.x; e.y = m.y;
 }
 
 // 对怪物/Boss 结算伤害；死亡则移出数组、记击杀、Boss 掉落所持武器（争夺点）
@@ -336,6 +357,8 @@ function broadcastState(room, now) {
     bosses: room.bosses.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp), weapon: b.weapon })),
     bullets: room.bullets.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss, boom: b.explode || 0 })), // boom = 爆炸半径（0 不爆），客户端冲击波圈与实际伤害范围一致
     pickups: room.pickups.map(pk => ({ id: pk.id, x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon })),
+    // 可破坏墙（地图初始墙不可破坏、不广播；将来玩家放置墙走这里，被啃穿即从列表消失）
+    walls: room.walls.filter(w => w.destructible).map(w => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h, hp: Math.round(w.hp) })),
   });
   for (const p of room.players.values()) if (p.ws.readyState === 1) p.ws.send(msg);
 }
@@ -354,9 +377,12 @@ wss.on('connection', ws => {
       const mapKey = G.MAPS[m.map] ? m.map : G.DEFAULT_MAP; // 房主选图，非法值回退默认
       const room = {
         code, mapKey, map: G.MAPS[mapKey],
+        // 每房间墙副本：地图模板不可变；可破坏墙/将来玩家放置墙改这份
+        walls: G.MAPS[mapKey].walls.map(w => ({ ...w, id: ++eid, destructible: false, hp: Infinity })),
         players: new Map(), monsters: [], bosses: [], bullets: [], pickups: [],
         timer: null, lastMonster: Date.now(), lastBoss: Date.now(),
       };
+      room.view = { w: room.map.w, h: room.map.h, walls: room.walls }; // bulletStep 的地图参数
       rooms.set(code, room);
       enterRoom(ws, room, m.name);
     } else if (m.t === 'join') {

@@ -11,7 +11,9 @@ const TICK_MS = 33; // 30 tick/s：云端联机降体感延迟（按键等待+�
 // panic* = 低血肾上腺素：HP 低于 panicBelow 时每次受伤提速 panicMul 倍，持续 panicMs（再受伤刷新时长）
 const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000, fireStunMs: 500, knockback: 24,
   panicBelow: 50, panicMul: 1.3, panicMs: 3000 };
-const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000, spawnEveryMs: 5000,  cap: 20 };
+const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000, spawnEveryMs: 5000,  cap: 20,
+  wallDmgPerSec: 30 }; // 啃可破坏墙每秒伤害
+const PATH_CELL = 60;  // A* 网格边长（px）
 // Boss：持枪远程（无碰撞伤害），视野 = 所持武器射程，移速缓慢；攻击节奏 = 开火 burstMs / 停火 restMs 交替
 const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2, burstMs: 3000, restMs: 2000 };
 const ROOM    = { maxPlayers: 4, codeLen: 4 };
@@ -164,6 +166,74 @@ function regenStep(p, now, dtSec) {
   }
 }
 
+// 网格 A* 寻路：不可破坏墙=不可pass，可破坏墙=高成本可pass（宁可绕路，封死才穿）
+// 返回路点数组（格子中心）或 null（不可达）。纯函数，调用方自行限流
+function findPath(walls, map, sx, sy, tx, ty, cell) {
+  const cols = Math.ceil(map.w / cell), rows = Math.ceil(map.h / cell);
+  const block = new Uint8Array(cols * rows);   // 255 不可pass
+  const dcost = new Uint8Array(cols * rows);   // 可破坏墙成本
+  for (const w of walls) {
+    const x0 = Math.max(0, Math.floor(w.x / cell)), x1 = Math.min(cols - 1, Math.floor((w.x + w.w - 1) / cell));
+    const y0 = Math.max(0, Math.floor(w.y / cell)), y1 = Math.min(rows - 1, Math.floor((w.y + w.h - 1) / cell));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const i = y * cols + x;
+      if (w.destructible) dcost[i] = Math.max(dcost[i], 12);
+      else block[i] = 255;
+    }
+  }
+  const at = (x, y) => Math.min(cols - 1, Math.max(0, Math.floor(x / cell)))
+    + Math.min(rows - 1, Math.max(0, Math.floor(y / cell))) * cols;
+  // 起点/终点落在墙格里时，螺旋找最近的可pass格
+  const fix = i => {
+    if (block[i] !== 255) return i;
+    const x0 = i % cols, y0 = (i / cols) | 0;
+    for (let r = 1; r <= 4; r++) {
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+        const x = x0 + dx, y = y0 + dy;
+        if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+        const j = y * cols + x;
+        if (block[j] !== 255) return j;
+      }
+    }
+    return i;
+  };
+  const si = fix(at(sx, sy)), ti = fix(at(tx, ty));
+  if (si === ti) return [];
+  const g = new Float64Array(cols * rows).fill(Infinity);
+  const from = new Int32Array(cols * rows).fill(-1);
+  const open = [si];
+  g[si] = 0;
+  const h = i => {
+    const dx = Math.abs(i % cols - ti % cols), dy = Math.abs((i / cols | 0) - (ti / cols | 0));
+    return dx + dy + 0.4 * Math.min(dx, dy); // octile
+  };
+  while (open.length) {
+    let bi = 0;
+    for (let k = 1; k < open.length; k++) if (g[open[k]] + h(open[k]) < g[open[bi]] + h(open[bi])) bi = k;
+    const cur = open.splice(bi, 1)[0];
+    if (cur === ti) {
+      const path = [];
+      for (let i = cur; i !== -1 && i !== si; i = from[i]) path.push({ x: (i % cols + 0.5) * cell, y: ((i / cols | 0) + 0.5) * cell });
+      return path.reverse();
+    }
+    const cx = cur % cols, cy = cur / cols | 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dy) continue;
+      const x = cx + dx, y = cy + dy;
+      if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
+      const ni = y * cols + x;
+      if (block[ni] === 255) continue;
+      if (dx && dy && (block[cy * cols + x] === 255 || block[y * cols + cx] === 255)) continue; // 禁穿角
+      const step = (dx && dy ? 1.41 : 1) + dcost[ni];
+      if (g[cur] + step >= g[ni]) continue;
+      g[ni] = g[cur] + step;
+      from[ni] = cur;
+      open.push(ni);
+    }
+  }
+  return null;
+}
+
 function pickFarthestSpawn(spawns, others) {
   let best = spawns[0], bestD = -1;
   for (const s of spawns) {
@@ -179,7 +249,7 @@ function pickBossSpawn(spawns, bosses, players) {
   return pickFarthestSpawn(free, players);
 }
 
-return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS,
+return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, PATH_CELL,
   dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
-  chaseStep, regenStep, pickFarthestSpawn, pickBossSpawn };
+  chaseStep, regenStep, findPath, pickFarthestSpawn, pickBossSpawn };
 });

@@ -82,6 +82,11 @@ for (const k of ['grass', 'dirt', 'ice', 'clay']) {
 }
 const floorPat = {};             // 地砖 canvas pattern 缓存
 
+// 静态墙（地图模板）+ 服务器广播的可破坏墙；被啃穿的墙从 state 列表消失即不再画
+function allWalls() {
+  return state && state.walls && state.walls.length ? curMap.walls.concat(state.walls) : curMap.walls;
+}
+
 // 装饰 props（无碰撞，纯客户端）：种子随机撒灌木/木箱/桶，避开墙与刷新点
 const propsCache = {};
 function propsOf(key) {
@@ -173,6 +178,8 @@ function detect(p0, s) {
   for (const m of gone(p0.monsters, s.monsters)) burst(m.x, m.y, 14, '#ff7043', 180, 0.5, 3);
   for (const b of gone(p0.bosses, s.bosses)) burst(b.x, b.y, 40, '#b06ce0', 260, 0.8, 5);    // Boss 大紫爆
   for (const pk of gone(p0.pickups, s.pickups)) burst(pk.x, pk.y, 10, '#ffd700', 150, 0.4, 3);
+  for (const w of gone(p0.walls || [], s.walls || [])) // 可破坏墙被啃穿：木屑爆
+    burst(w.x + w.w / 2, w.y + w.h / 2, 16, '#a9743f', 180, 0.5, 3);
   for (const q0 of p0.players) { // 玩家死亡爆炸（本色）
     const q1 = s.players.find(p => p.id === q0.id);
     if (!q1 || q0.respawnIn > 0 || q1.respawnIn === 0) continue;
@@ -240,12 +247,12 @@ function render() {
   }
   drawProps();
 
-  // 墙（sample 画风：深灰主体 + 橙色粗描边 + 内暗面）
-  for (const w of curMap.walls) {
+  // 墙（sample 画风：深灰主体 + 橙色粗描边 + 内暗面；可破坏墙 = 木箱色）
+  for (const w of allWalls()) {
     if (!inView(w.x + w.w / 2, w.y + w.h / 2, Math.max(w.w, w.h) / 2)) continue;
-    ctx.fillStyle = '#3f4145';
+    ctx.fillStyle = w.destructible ? '#a9743f' : '#3f4145';
     ctx.fillRect(w.x, w.y, w.w, w.h);
-    ctx.strokeStyle = '#e8722a'; ctx.lineWidth = 6;
+    ctx.strokeStyle = w.destructible ? '#7d5426' : '#e8722a'; ctx.lineWidth = 6;
     ctx.strokeRect(w.x + 3, w.y + 3, w.w - 6, w.h - 6);
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.fillRect(w.x + 8, w.y + 8, Math.max(0, w.w - 16), Math.max(0, w.h - 16));
@@ -291,7 +298,7 @@ function render() {
     const moving = o && Math.abs(m.x - o.x) + Math.abs(m.y - o.y) > 0.4;
     const tgt = moving ? Math.atan2(m.y - o.y, m.x - o.x) : null;
     const ang = tgt === null ? (aimAngle.get('m' + m0.id) || 0)
-      : turnToward(aimAngle.get('m' + m0.id) || 0, tgt, 0.25);
+      : turnToward(aimAngle.get('m' + m0.id) || 0, tgt, 0.12);
     aimAngle.set('m' + m0.id, ang);
     ctx.globalAlpha = 0.3; ctx.fillStyle = '#ff5252';
     ctx.beginPath(); ctx.ellipse(m.x, m.y + 4, 15, 9, 0, 0, Math.PI * 2); ctx.fill();
@@ -320,7 +327,7 @@ function render() {
     const moving = o && Math.abs(b.x - o.x) + Math.abs(b.y - o.y) > 0.4;
     const tgt = moving ? Math.atan2(b.y - o.y, b.x - o.x) : null;
     const ang = tgt === null ? (aimAngle.get('b' + b0.id) || 0)
-      : turnToward(aimAngle.get('b' + b0.id) || 0, tgt, 0.25);
+      : turnToward(aimAngle.get('b' + b0.id) || 0, tgt, 0.12);
     aimAngle.set('b' + b0.id, ang);
     ctx.globalAlpha = 0.25; ctx.fillStyle = '#9b59b6';
     ctx.beginPath(); ctx.ellipse(b.x, b.y + 8, 36, 22, 0, 0, Math.PI * 2); ctx.fill();
@@ -554,7 +561,7 @@ function minimap() {
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.fillRect(ox, oy, mw, mh);
   ctx.fillStyle = '#3d4a6b';
-  for (const w of curMap.walls) ctx.fillRect(ox + w.x * sx, oy + w.y * sy, Math.max(1, w.w * sx), Math.max(1, w.h * sy));
+  for (const w of allWalls()) ctx.fillRect(ox + w.x * sx, oy + w.y * sy, Math.max(1, w.w * sx), Math.max(1, w.h * sy));
   ctx.fillStyle = '#ffd700';
   for (const pk of state.pickups) dot(pk.x, pk.y, 1.5);
   ctx.fillStyle = '#ff5252';

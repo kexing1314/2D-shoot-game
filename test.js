@@ -142,6 +142,23 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   assert.ok(Math.abs(b5.range - 475) < 1e-9);
 }
 
+// —— A* 寻路（敌人绕路/啃墙的地基）——
+{
+  const M = { w: 600, h: 600 }; // 10×10 格 @60px
+  // 空旷地：有路
+  let p = G.findPath([], M, 60, 300, 540, 300, 60);
+  assert.ok(p && p.length >= 1);
+  // 不可破坏墙封中段（顶部留口）→ 绕顶口，路点全部避开墙列（x∈240-360 且 y≥120）
+  p = G.findPath([{ x: 280, y: 120, w: 40, h: 480, destructible: false }], M, 60, 300, 540, 300, 60);
+  assert.ok(p && p.some(pt => pt.y < 120));
+  assert.ok(p.every(pt => !(pt.x > 240 && pt.x < 360 && pt.y >= 120)));
+  // 同位置可破坏墙全封 → 唯一路线是穿墙（高成本但可达）
+  p = G.findPath([{ x: 280, y: 0, w: 40, h: 600, destructible: true }], M, 60, 300, 540, 300, 60);
+  assert.ok(p && p.some(pt => pt.x >= 240 && pt.x <= 360));
+  // 不可破坏全封 → null
+  assert.equal(G.findPath([{ x: 280, y: 0, w: 40, h: 600, destructible: false }], M, 60, 300, 540, 300, 60), null);
+}
+
 // —— Task 4: 追击 / 恢复 / 选点 ——
 {
   const m = { x: 0, y: 0 };
