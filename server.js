@@ -60,6 +60,7 @@ function enterRoom(ws, room, name) {
     kills: 0, deaths: 0, keys: {},
     lastFire: -1e9, lastDamagedAt: -1e9, deadUntil: 0,
     ammo: G.WEAPONS.pistol.mag, reloadUntil: 0, prevR: false,
+    level: 1, xp: 0, shield: G.shieldMax(1), shieldMax: G.shieldMax(1),
   };
   room.players.set(id, p);
   ws.room = room; ws.playerId = id;
@@ -94,7 +95,7 @@ function tick(room) {
     const dy = (p.keys.s ? 1 : 0) - (p.keys.w ? 1 : 0);
     if (dx || dy) {
       const l = Math.hypot(dx, dy); // 斜向不超速
-      const speed = G.PLAYER.speed * (now < (p.panicUntil || 0) ? G.PLAYER.panicMul : 1); // 低血加速
+      const speed = G.PLAYER.speed * G.levelMul(p.level).speed * (now < (p.panicUntil || 0) ? G.PLAYER.panicMul : 1); // 等级移速 + 低血加速
       const m = G.moveWithWalls(p.x, p.y,
         dx / l * speed * dt, dy / l * speed * dt,
         G.PLAYER.r, room.walls);
@@ -102,18 +103,20 @@ function tick(room) {
     }
     G.regenStep(p, now, dt);
 
-    // 换弹：打空自动 / R 键手动（边沿触发防按住连换）；立即补满弹匣，换弹期间不能开火
+    // 换弹：打空自动 / R 键手动（边沿触发防按住连换）；立即补满弹匣，换弹期间不能开火；时长吃等级倍率
     const w = G.WEAPONS[p.weapon];
+    const mul = G.levelMul(p.level);
     if (now >= p.reloadUntil && (p.ammo <= 0 || (p.keys.r && !p.prevR && p.ammo < w.mag))) {
       p.ammo = w.mag;
-      p.reloadUntil = now + w.reloadMs;
+      p.reloadUntil = now + w.reloadMs * mul.reload;
     }
     p.prevR = !!p.keys.r;
 
-    // 射击：方向键合成向量（两键同按斜射，对键抵消不开火）；受伤硬直/换弹期内停火
+    // 射击：方向键合成向量（两键同按斜射，对键抵消不开火）；受伤硬直/换弹期内停火；伤害/射速/弹速吃等级倍率
     const dir = now >= (p.fireStunUntil || 0) && now >= p.reloadUntil ? G.fireDir(p.keys) : null;
     if (dir) {
-      const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id);
+      const bs = G.weaponFire(p.weapon, p.x, p.y, dir, now, p.lastFire, p.id,
+        { rateMul: mul.rate, speedMul: mul.bulletSpeed, dmgMul: mul.dmg });
       if (bs) { p.ammo--; p.lastFire = now; p.face = dir; for (const x of bs) x.id = ++eid; room.bullets.push(...bs); }
     }
   }
@@ -124,8 +127,8 @@ function tick(room) {
       if (b.explode) boom(room, b, now);
       return false;
     }
-    // 命中玩家（不打自己、不打死人）
-    for (const p of room.players.values()) {
+    // 命中玩家：仅 Boss 子弹打玩家（合作模式：玩家子弹穿过队友）
+    if (b.boss) for (const p of room.players.values()) {
       if (p.id === b.owner || p.deadUntil) continue;
       if (G.dist(b.x, b.y, p.x, p.y) >= G.PLAYER.r + b.size) continue;
       if (b.pierce) {
@@ -165,8 +168,9 @@ function tick(room) {
   room.pickups = room.pickups.filter(pk => {
     for (const p of room.players.values()) {
       if (!p.deadUntil && G.dist(p.x, p.y, pk.x, pk.y) < G.PLAYER.r + 10) {
-        p.weapon = pk.weapon;
-        p.ammo = G.WEAPONS[pk.weapon].mag; p.reloadUntil = 0; // 换枪即满弹
+        if (pk.type === 'health') { p.hp = G.PLAYER.hpMax; p.shield = p.shieldMax; }       // 医疗包：血盾回满
+        else if (pk.type === 'ammo') { p.ammo = G.WEAPONS[p.weapon].mag; p.reloadUntil = 0; } // 弹药箱：秒满弹
+        else { p.weapon = pk.weapon; p.ammo = G.WEAPONS[p.weapon].mag; p.reloadUntil = 0; }  // 换枪即满弹
         return false;
       }
     }
@@ -177,7 +181,7 @@ function tick(room) {
   const alive = [...room.players.values()].filter(p => !p.deadUntil);
   for (const m of room.monsters) {
     const target = nearest(alive, m.x, m.y);
-    stepAlongPath(room, m, G.MONSTER.r, target, G.MONSTER.speed, dt, now, 500);
+    stepAlongPath(room, m, G.MONSTER.r, target, m.speed || G.MONSTER.speed, dt, now, 500);
     if (target && now >= m.nextHit && G.dist(m.x, m.y, target.x, target.y) < G.MONSTER.r + G.PLAYER.r) {
       damagePlayer(room, target, G.MONSTER.dmg, null, now, m);
       m.nextHit = now + G.MONSTER.cooldownMs;
@@ -205,11 +209,20 @@ function tick(room) {
     }
   }
 
-  // 5. 刷怪（房间里有人就刷；全部重生中也刷）
+  // 5. 波次怪潮：清完进休息（掉补给）→ 到点下一波（数量/HP/速度随波次+难度缩放）；Boss 仍定时
   if (room.players.size > 0) {
-    if (now - room.lastMonster >= G.MONSTER.spawnEveryMs && room.monsters.length < G.MONSTER.cap) {
-      room.lastMonster = now;
-      room.monsters.push(edgeSpawn(room.map));
+    if (room.waveState === 'fight') {
+      if (room.monsters.length === 0) {
+        room.waveState = 'rest';
+        room.restUntil = now + G.WAVE.restMs;
+        for (let i = 0; i < G.WAVE.suppliesPerRest; i++) room.pickups.push(supplyDrop(room));
+      }
+    } else if (now >= room.restUntil) {
+      room.wave++;
+      const hm = G.waveHpMul(room.wave, room.diff), sm = G.waveSpeedMul(room.wave, room.diff);
+      const n = G.waveCount(room.wave, room.diff);
+      for (let i = 0; i < n; i++) room.monsters.push(edgeSpawn(room.map, hm, sm));
+      room.waveState = 'fight';
     }
     if (now - room.lastBoss >= G.BOSS.spawnEveryMs && room.bosses.length < G.BOSS.cap) {
       const s = G.pickBossSpawn(room.map.bossSpawns, room.bosses, alive);
@@ -232,6 +245,7 @@ function respawn(room, p, now) {
   p.lastDamagedAt = now; // 重生后也走 3s 脱战才回血
   p.weapon = 'pistol';
   p.ammo = G.WEAPONS.pistol.mag; p.reloadUntil = 0;
+  p.shieldMax = G.shieldMax(p.level); p.shield = p.shieldMax; // 重生护盾回满（按减半后等级）
   p.keys = {};
   p.lastFire = now;
 }
@@ -239,7 +253,9 @@ function respawn(room, p, now) {
 // src = 伤害来源位置（子弹/怪物），用于击退方向；缺省不击退
 function damagePlayer(room, p, dmg, attackerId, now, src) {
   if (p.deadUntil) return; // 已死亡玩家不再受伤（防止同tick多怪重复计死亡）
-  p.hp -= dmg;
+  let d = dmg;
+  if (p.shield > 0) { const abs = Math.min(p.shield, d); p.shield -= abs; d -= abs; } // 护盾先吸收
+  p.hp -= d;
   p.lastDamagedAt = now;
   p.fireStunUntil = now + G.PLAYER.fireStunMs; // 受伤硬直：暂停射击（移动不受影响）
   if (src) {
@@ -257,6 +273,8 @@ function damagePlayer(room, p, dmg, attackerId, now, src) {
   }
   p.hp = 0;
   p.deaths++;
+  p.level = Math.max(1, Math.floor(p.level / 2)); // 死亡惩罚：等级减半
+  p.xp = 0;
   p.deadUntil = now + G.PLAYER.respawnMs;
   p.keys = {};
   if (attackerId) {
@@ -299,13 +317,17 @@ function damageMonster(room, list, i, dmg, isBoss, killerId) {
   if (m.hp > 0) return;
   list.splice(i, 1);
   const killer = room.players.get(killerId);
-  if (killer) killer.kills++;
+  if (killer) {
+    killer.kills++;
+    grantXp(room, isBoss ? G.waveBossXp(room.wave, room.diff) : G.waveXp(room.wave, room.diff));
+  }
   if (isBoss) room.pickups.push({ id: ++eid, x: m.x, y: m.y, weapon: m.weapon });
 }
 
 // 爆炸弹引爆：AOE 伤玩家（不伤射手/死人，沿爆心→玩家击退）；Boss 弹只炸玩家，不炸怪/其他 Boss
 function boom(room, b, now) {
-  for (const p of room.players.values()) {
+  // 合作模式：玩家火箭不伤队友，仅 Boss 爆炸打玩家
+  if (b.boss) for (const p of room.players.values()) {
     if (p.id === b.owner || p.deadUntil) continue;
     if (G.dist(b.x, b.y, p.x, p.y) > b.explode + G.PLAYER.r) continue;
     damagePlayer(room, p, b.explodeDmg, b.owner, now, b);
@@ -324,7 +346,7 @@ function dropWeapon() {
   return names[Math.floor(Math.random() * names.length)];
 }
 
-function edgeSpawn(map) {
+function edgeSpawn(map, hpMul = 1, speedMul = 1) {
   const m = 60; // 距边缘留白，避开 20px 边界墙
   const side = Math.floor(Math.random() * 4);
   const rx = () => m + Math.random() * (map.w - 2 * m);
@@ -333,7 +355,31 @@ function edgeSpawn(map) {
     : side === 1 ? { x: rx(), y: map.h - m }
     : side === 2 ? { x: m, y: ry() }
     : { x: map.w - m, y: ry() };
-  return { id: ++eid, x: pos.x, y: pos.y, hp: G.MONSTER.hp, nextHit: 0 };
+  return { id: ++eid, x: pos.x, y: pos.y, hp: G.MONSTER.hp * hpMul, speed: G.MONSTER.speed * speedMul, nextHit: 0 };
+}
+
+// 休息期补给：医疗包/弹药箱，随机空旷点（避墙重试 8 次）
+function supplyDrop(room) {
+  for (let i = 0; i < 8; i++) {
+    const x = 200 + Math.random() * (room.map.w - 400);
+    const y = 200 + Math.random() * (room.map.h - 400);
+    if (room.walls.some(w => G.circleRectHit(x, y, 40, w))) continue;
+    return { id: ++eid, x, y, type: Math.random() < 0.5 ? 'health' : 'ammo' };
+  }
+  return { id: ++eid, x: room.map.w / 2, y: room.map.h / 2, type: 'health' };
+}
+
+// 合作经验：一人杀怪全场同额；升级护盾回满（升级奖励感）
+function grantXp(room, n) {
+  for (const p of room.players.values()) {
+    p.xp += n;
+    while (p.level < G.LEVELS.max && p.xp >= G.xpNeed(p.level)) {
+      p.xp -= G.xpNeed(p.level);
+      p.level++;
+      p.shieldMax = G.shieldMax(p.level);
+      p.shield = p.shieldMax;
+    }
+  }
 }
 
 function nearest(list, x, y) {
@@ -348,11 +394,14 @@ function nearest(list, x, y) {
 function broadcastState(room, now) {
   const msg = JSON.stringify({
     t: 'state',
+    wave: room.wave,
+    restIn: room.waveState === 'rest' ? Math.max(1, Math.ceil((room.restUntil - now) / 1000)) : 0,
     players: [...room.players.values()].map(p => ({
       id: p.id, name: p.name, color: p.color,
       x: Math.round(p.x), y: Math.round(p.y), hp: Math.round(p.hp),
       weapon: p.weapon, kills: p.kills, deaths: p.deaths, face: p.face,
       ammo: p.ammo, reloading: now < p.reloadUntil,
+      level: p.level, xp: Math.round(p.xp), shield: Math.round(p.shield),
       boost: p.panicUntil > now, // 低血加速中（客户端画残影提示）
       respawnIn: p.deadUntil ? Math.max(1, Math.ceil((p.deadUntil - now) / 1000)) : 0,
     })),
@@ -360,7 +409,7 @@ function broadcastState(room, now) {
     monsters: room.monsters.map(m => ({ id: m.id, x: Math.round(m.x), y: Math.round(m.y) })),
     bosses: room.bosses.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), hp: Math.round(b.hp), weapon: b.weapon })),
     bullets: room.bullets.map(b => ({ id: b.id, x: Math.round(b.x), y: Math.round(b.y), size: b.size, boss: !!b.boss, boom: b.explode || 0 })), // boom = 爆炸半径（0 不爆），客户端冲击波圈与实际伤害范围一致
-    pickups: room.pickups.map(pk => ({ id: pk.id, x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon })),
+    pickups: room.pickups.map(pk => ({ id: pk.id, x: Math.round(pk.x), y: Math.round(pk.y), weapon: pk.weapon, type: pk.type || 'weapon' })),
     // 可破坏墙（地图初始墙不可破坏、不广播；将来玩家放置墙走这里，被啃穿即从列表消失）
     walls: room.walls.filter(w => w.destructible).map(w => ({ id: w.id, x: w.x, y: w.y, w: w.w, h: w.h, hp: Math.round(w.hp) })),
   });
@@ -384,7 +433,9 @@ wss.on('connection', ws => {
         // 每房间墙副本：地图模板不可变；可破坏墙/将来玩家放置墙改这份
         walls: G.MAPS[mapKey].walls.map(w => ({ ...w, id: ++eid, destructible: false, hp: Infinity })),
         players: new Map(), monsters: [], bosses: [], bullets: [], pickups: [],
-        timer: null, lastMonster: Date.now(), lastBoss: Date.now(),
+        timer: null, lastBoss: Date.now(),
+        diff: 1, // 难度乘数（将来菜单选项）；波次数量/HP/经验全乘它
+        wave: 0, waveState: 'rest', restUntil: Date.now() + G.WAVE.firstDelayMs,
       };
       room.view = { w: room.map.w, h: room.map.h, walls: room.walls }; // bulletStep 的地图参数
       rooms.set(code, room);

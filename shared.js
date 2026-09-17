@@ -11,9 +11,29 @@ const TICK_MS = 33; // 30 tick/s：云端联机降体感延迟（按键等待+�
 // panic* = 低血肾上腺素：HP 低于 panicBelow 时每次受伤提速 panicMul 倍，持续 panicMs（再受伤刷新时长）
 const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000, fireStunMs: 500, knockback: 24,
   panicBelow: 50, panicMul: 1.3, panicMs: 3000 };
-const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000, spawnEveryMs: 5000,  cap: 20,
+const MONSTER = { r: 14, hp: 50,  speed: 60, dmg: 10, cooldownMs: 1000,
   wallDmgPerSec: 30 }; // 啃可破坏墙每秒伤害
 const PATH_CELL = 60;  // A* 网格边长（px）
+
+// 波次怪潮：数量/HP/经验全走函数，diff = 难度乘数（将来菜单选项传不同 diff，room 存一个数字）
+const WAVE = { baseCount: 10, perWave: 6, maxCount: 100, hpPerWave: 0.12,
+  speedPerWave: 0.04, speedCapWaves: 8, restMs: 6000, firstDelayMs: 3000, suppliesPerRest: 2 };
+const waveCount    = (wave, diff = 1) => Math.min(Math.round((WAVE.baseCount + WAVE.perWave * wave) * diff), WAVE.maxCount);
+const waveHpMul    = (wave, diff = 1) => 1 + (wave - 1) * WAVE.hpPerWave * diff;
+const waveSpeedMul = (wave, diff = 1) => 1 + Math.min(wave - 1, WAVE.speedCapWaves) * WAVE.speedPerWave;
+const waveXp       = (wave, diff = 1) => Math.round((10 + (wave - 1) * 3) * diff);
+const waveBossXp   = (wave, diff = 1) => Math.round((100 + (wave - 1) * 20) * diff);
+
+// 等级：上限 15，~30 分钟满级；p=进度，六属性倍率（将来加属性只改 levelMul）
+// 满级：移速/伤害/护盾/弹速 ×2，换弹 ×2 快，射速 ×3
+const LEVELS = { max: 15, shieldBase: 25, xpBase: 30, xpPow: 1.35 };
+const levelMul = level => {
+  const p = (Math.min(level, LEVELS.max) - 1) / (LEVELS.max - 1);
+  return { speed: 1 + p, dmg: 1 + p, shield: 1 + p, bulletSpeed: 1 + p,
+    reload: 1 / (1 + p), rate: 1 / (1 + 2 * p) };
+};
+const shieldMax = level => LEVELS.shieldBase * levelMul(level).shield;
+const xpNeed = level => Math.round(LEVELS.xpBase * Math.pow(level, LEVELS.xpPow));
 // Boss：持枪远程（无碰撞伤害），视野 = 所持武器射程，移速缓慢；攻击节奏 = 开火 burstMs / 停火 restMs 交替
 const BOSS    = { r: 32, hp: 300, speed: 40, spawnEveryMs: 40000, cap: 2, burstMs: 3000, restMs: 2000 };
 const ROOM    = { maxPlayers: 4, codeLen: 4 };
@@ -119,9 +139,11 @@ function fireDir(keys) {
 }
 
 // dir = 单位向量 {x,y}。冷却未到 / 参数非法 → null；否则返回子弹数组（扇形以 dir 为中心对称展开）
-function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner) {
+// opts = 等级倍率 { rateMul, speedMul, dmgMul }（缺省 1，Boss 不传）
+function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner, opts) {
   const w = WEAPONS[weaponKey];
-  if (!w || !dir || (!dir.x && !dir.y) || now - lastFireAt < w.rate) return null;
+  const o = opts || {};
+  if (!w || !dir || (!dir.x && !dir.y) || now - lastFireAt < w.rate * (o.rateMul || 1)) return null;
   const base = Math.atan2(dir.y, dir.x);
   const spread = w.spread * Math.PI / 180;
   const bullets = [];
@@ -129,8 +151,8 @@ function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner) {
     const a = base + (i - (w.count - 1) / 2) * spread;
     bullets.push({
       x, y,
-      vx: Math.cos(a) * w.speed, vy: Math.sin(a) * w.speed,
-      dmg: w.dmg, size: w.size, pierce: w.pierce, owner, range: w.range,
+      vx: Math.cos(a) * w.speed * (o.speedMul || 1), vy: Math.sin(a) * w.speed * (o.speedMul || 1),
+      dmg: w.dmg * (o.dmgMul || 1), size: w.size, pierce: w.pierce, owner, range: w.range,
       explode: w.explode || 0, explodeDmg: w.explodeDmg || 0,
     });
   }
@@ -158,12 +180,12 @@ function chaseStep(e, r, target, speed, dtSec, walls) {
   e.x = p.x; e.y = p.y;
 }
 
-// 脱战 regenDelayMs 后每秒回 regenPerSec，hpMax 封顶
+// 脱战 regenDelayMs 后回血（regenPerSec/s）+ 回盾（shieldMax/10 每秒，10s 回满），各自封顶
 function regenStep(p, now, dtSec) {
   if (p.deadUntil) return;
-  if (now - p.lastDamagedAt >= PLAYER.regenDelayMs && p.hp < PLAYER.hpMax) {
-    p.hp = Math.min(PLAYER.hpMax, p.hp + PLAYER.regenPerSec * dtSec);
-  }
+  if (now - p.lastDamagedAt < PLAYER.regenDelayMs) return;
+  if (p.hp < PLAYER.hpMax) p.hp = Math.min(PLAYER.hpMax, p.hp + PLAYER.regenPerSec * dtSec);
+  if (p.shieldMax && p.shield < p.shieldMax) p.shield = Math.min(p.shieldMax, p.shield + p.shieldMax / 10 * dtSec);
 }
 
 // 网格 A* 寻路：不可破坏墙=不可pass，可破坏墙=高成本可pass（宁可绕路，封死才穿）
@@ -250,6 +272,8 @@ function pickBossSpawn(spawns, bosses, players) {
 }
 
 return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, PATH_CELL,
+  WAVE, waveCount, waveHpMul, waveSpeedMul, waveXp, waveBossXp,
+  LEVELS, levelMul, shieldMax, xpNeed,
   dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
   chaseStep, regenStep, findPath, pickFarthestSpawn, pickBossSpawn };
 });

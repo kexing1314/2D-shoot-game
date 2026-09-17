@@ -206,6 +206,7 @@ function detect(p0, s) {
     shake = Math.min(12, shake + (me0.hp - me1.hp) * 0.3);
     flash = Math.min(1, flash + 0.5);
   }
+  if (me0 && me1 && me1.level > me0.level) burst(me1.x, me1.y, 26, '#ffd700', 240, 0.7, 4); // 升级金爆
 }
 
 function burst(x, y, n, color, speed, life, size) {
@@ -306,19 +307,24 @@ function render() {
     }
     ctx.globalAlpha = 1;
   }
-  // 拾取物（旋转金方块 + 脉冲光环）
+  // 拾取物（旋转方块 + 脉冲光环）：金=武器 / 绿十字=医疗包 / 橙弹条=弹药箱
+  const PK_COLOR = { weapon: '#ffd700', health: '#2ecc71', ammo: '#ff9f43' };
   for (const pk of state.pickups) {
     if (!inView(pk.x, pk.y, 20)) continue;
+    const col = PK_COLOR[pk.type] || PK_COLOR.weapon;
     ctx.globalAlpha = 0.18 + 0.07 * Math.sin(t / 200 + pk.x);
-    ctx.fillStyle = '#ffd700';
+    ctx.fillStyle = col;
     circ(pk.x, pk.y, 17);
     ctx.globalAlpha = 1;
     ctx.save();
     ctx.translate(pk.x, pk.y);
     ctx.rotate(t / 300);
-    ctx.fillStyle = '#ffd700';
+    ctx.fillStyle = col;
     ctx.fillRect(-8, -8, 16, 16);
-    ctx.strokeStyle = '#fff3b0'; ctx.lineWidth = 2;
+    ctx.fillStyle = '#fff';
+    if (pk.type === 'health') { ctx.fillRect(-2, -6, 4, 12); ctx.fillRect(-6, -2, 12, 4); }
+    else if (pk.type === 'ammo') { ctx.fillRect(-5, -5, 3, 10); ctx.fillRect(1, -5, 3, 10); }
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2;
     ctx.strokeRect(-8, -8, 16, 16);
     ctx.restore();
   }
@@ -466,12 +472,16 @@ function render() {
       ctx.beginPath(); ctx.arc(p.x, p.y, G.PLAYER.r, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.fillStyle = '#eee'; ctx.font = '12px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(p0.name, p.x, p.y - G.PLAYER.r - 16);
+    ctx.fillText(`${p0.name} Lv${p0.level}`, p.x, p.y - G.PLAYER.r - 26);
+    // 护盾细蓝条（血条上方）
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(p.x - 17, p.y - G.PLAYER.r - 20, 34, 4);
+    ctx.fillStyle = '#4a9eff';
+    ctx.fillRect(p.x - 16, p.y - G.PLAYER.r - 19, 32 * clamp(p0.shield / G.shieldMax(p0.level), 0, 1), 2);
     bar(p.x, p.y - G.PLAYER.r - 10, 32, p0.hp / G.PLAYER.hpMax);
     // 自己换弹中：头顶黄字闪烁提示
     if (p0.id === myId && p0.reloading && Math.sin(t / 120) > 0) {
       ctx.fillStyle = '#ffd700';
-      ctx.fillText('换弹中…', p.x, p.y - G.PLAYER.r - 24);
+      ctx.fillText('换弹中…', p.x, p.y - G.PLAYER.r - 34);
     }
   }
   // 爆炸冲击波圈：橙环扩散到真实伤害半径 + 内部火光填充，随扩散淡出
@@ -551,6 +561,10 @@ function statusBar(me) {
   // 大血条（绿→黄→红）
   const frac = clamp(me.hp / G.PLAYER.hpMax, 0, 1);
   const hx = x + 16, hy = y + 18, hw = 220, hh = 18;
+  // 护盾蓝条（大血条上方）
+  const smax = G.shieldMax(me.level);
+  ctx.fillStyle = '#222'; ctx.fillRect(hx, hy - 8, hw, 5);
+  ctx.fillStyle = '#4a9eff'; ctx.fillRect(hx, hy - 8, hw * clamp(me.shield / smax, 0, 1), 5);
   ctx.fillStyle = '#333'; ctx.fillRect(hx, hy, hw, hh);
   ctx.fillStyle = frac > 0.5 ? '#2ecc71' : frac > 0.25 ? '#f1c40f' : '#e74c3c';
   ctx.fillRect(hx, hy, hw * frac, hh);
@@ -570,7 +584,7 @@ function statusBar(me) {
       tx + nameW + 10, y + 25);
   }
   ctx.font = '13px sans-serif'; ctx.fillStyle = '#ccc';
-  ctx.fillText(`击杀 ${me.kills} · 死亡 ${me.deaths} · 弹药 ${me.ammo}/${w ? w.mag : '?'}`, tx, y + 44);
+  ctx.fillText(`击杀 ${me.kills} · 死亡 ${me.deaths} · 弹药 ${me.ammo}/${w ? w.mag : '?'} · Lv${me.level} ${me.level >= G.LEVELS.max ? 'MAX' : `经验 ${me.xp}/${G.xpNeed(me.level)}`}`, tx, y + 44);
 }
 
 function drawHUD(me) {
@@ -586,6 +600,11 @@ function drawHUD(me) {
   ctx.fillStyle = '#888';
   ctx.textAlign = 'center';
   ctx.fillText('房间 ' + roomCode, canvas.width / 2, 20);
+  // 波次信息（顶中第二行）：战斗中橙 / 休息中金
+  ctx.fillStyle = state.restIn ? '#ffd700' : '#ff7043';
+  ctx.font = '16px sans-serif';
+  ctx.fillText(state.restIn ? `下一波 ${state.restIn} 秒` : `第 ${state.wave} 波 · 剩 ${state.monsters.length} 只`,
+    canvas.width / 2, 40);
   // 雷达小地图（右上）
   minimap();
   // 网络延迟：小地图正下方，绿/黄/红三档
@@ -619,8 +638,10 @@ function minimap() {
   ctx.fillRect(ox, oy, mw, mh);
   ctx.fillStyle = (WALL_STYLE[curMap.floor] || WALL_STYLE.grass).edge; // 小地图墙色跟主题
   for (const w of allWalls()) ctx.fillRect(ox + w.x * sx, oy + w.y * sy, Math.max(1, w.w * sx), Math.max(1, w.h * sy));
-  ctx.fillStyle = '#ffd700';
-  for (const pk of state.pickups) dot(pk.x, pk.y, 1.5);
+  for (const pk of state.pickups) {
+    ctx.fillStyle = pk.type === 'health' ? '#2ecc71' : pk.type === 'ammo' ? '#ff9f43' : '#ffd700';
+    dot(pk.x, pk.y, 1.5);
+  }
   ctx.fillStyle = '#ff5252';
   for (const m of state.monsters) dot(m.x, m.y, 1);
   ctx.fillStyle = '#9b59b6';

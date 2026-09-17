@@ -37,6 +37,34 @@ for (const [name, wp] of Object.entries(G.WEAPONS)) {
 assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
   [[12, 1500], [40, 2600], [5, 2200], [1, 3000]]);
 
+// —— 等级 / 波次 / 经验（合作化轮）——
+{
+  const m1 = G.levelMul(1), m15 = G.levelMul(G.LEVELS.max);
+  assert.deepEqual([m1.speed, m1.dmg, m1.shield, m1.bulletSpeed, m1.reload, m1.rate], [1, 1, 1, 1, 1, 1]);
+  // 满级：移速/伤害/护盾/弹速 ×2，换弹 ×2 快，射速 ×3
+  assert.ok(Math.abs(m15.speed - 2) < 1e-9 && Math.abs(m15.dmg - 2) < 1e-9);
+  assert.ok(Math.abs(m15.shield - 2) < 1e-9 && Math.abs(m15.bulletSpeed - 2) < 1e-9);
+  assert.ok(Math.abs(m15.reload - 0.5) < 1e-9);
+  assert.ok(Math.abs(m15.rate - 1 / 3) < 1e-9);
+  assert.equal(G.shieldMax(1), 25);
+  assert.equal(G.shieldMax(15), 50);
+  assert.equal(G.xpNeed(1), 30);
+  assert.ok(G.xpNeed(14) > G.xpNeed(7) && G.xpNeed(7) > G.xpNeed(1)); // 越升越贵
+  // 波次：数量/经验随波次与难度缩放、封顶 100
+  assert.equal(G.waveCount(1), 16);
+  assert.equal(G.waveCount(10), 70);
+  assert.equal(G.waveCount(99), 100);
+  assert.equal(G.waveCount(1, 2), 32);
+  assert.equal(G.waveXp(1), 10);
+  assert.equal(G.waveXp(10), 37);
+  assert.equal(G.waveBossXp(1), 100);
+  // 等级倍率进 weaponFire：弹速/伤害乘上、冷却按 rateMul 缩
+  const bs = G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1', { rateMul: 0.5, speedMul: 2, dmgMul: 2 });
+  assert.equal(bs[0].vx, 1000);
+  assert.equal(bs[0].dmg, 50);
+  assert.equal(G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 9100, 9000, 'p1', { rateMul: 0.5 }), null); // 150ms 冷却未到
+}
+
 // —— Task 2: 几何与移动 ——
 assert.equal(G.dist(0, 0, 3, 4), 5);
 
