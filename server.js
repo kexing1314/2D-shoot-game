@@ -207,7 +207,7 @@ function tick(room) {
         });
       }
     }
-    const reach = m.r + G.PLAYER.r + 6;
+    const reach = m.r + G.PLAYER.r + G.MONSTER.reach;
     if (m.windupUntil) { // 前摇结束：仍在接触范围才结算伤害（躲开就落空）
       if (now >= m.windupUntil) {
         m.windupUntil = 0;

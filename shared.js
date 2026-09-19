@@ -14,7 +14,7 @@ const PLAYER  = { r: 16, hpMax: 100, speed: 170, respawnMs: 3000, regenPerSec: 2
   stunMs: 750, stunShieldedMs: 400, knockback: 24, knockbackShielded: 12, shieldBreakRegenMs: 20000,
   panicBelow: 50, panicMul: 1.3, panicMs: 3000 };
 // 怪物公共参数（个体 r/hp/speed/dmg 在 MONSTER_TYPES）
-const MONSTER = { cooldownMs: 1000,
+const MONSTER = { cooldownMs: 1000, reach: 16, // reach = 接触判定外额外攻击距离（px）
   wallDmgPerSec: 30, // 啃可破坏墙每秒伤害
   knockback: 20, stunMs: 750, // 被子弹命中的击退/僵持（不能接触攻击）
   // 赶路速度分区：近距离（=视野半宽 640×1.2）内原速，中距 ×2，远距 ×3
@@ -77,7 +77,7 @@ const ROOM    = { maxPlayers: 4, codeLen: 4 };
 // pierce = 基础穿透数（子弹可命中 1 + pierce×等级倍率 个目标后消失；0 = 命中即消失）
 // mag = 弹匣容量，reloadMs = 换弹时长（打空自动换弹 / R 键手动，期间不能开火）
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, spread: 0,  pierce: 1, size: 3, range: 600, mag: 12, reloadMs: 1500 },
+  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, spread: 0,  pierce: 0, size: 3, range: 600, mag: 12, reloadMs: 1500 },
   mg:      { rate: 100, dmg: 15, speed: 1500, count: 1, spread: 0,  pierce: 2, size: 3, range: 500, mag: 40, reloadMs: 2600 },
   shotgun: { rate: 600, dmg: 20, speed: 1500, count: 5, spread: 15, pierce: 3, size: 3, range: 400, mag: 5,  reloadMs: 2200 },
   rocket:  { rate: 1500, dmg: 30, speed: 1050, count: 1, spread: 0, pierce: 0, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
