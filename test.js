@@ -67,15 +67,15 @@ assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
 }
 {
   // 穿透：武器基础数 + 等级档（5/10/15 级 ×2/×3/×4）
-  assert.equal(G.WEAPONS.pistol.pierce, 0); // 手枪基础不穿透
-  assert.equal(G.WEAPONS.mg.pierce, 2);
-  assert.equal(G.WEAPONS.shotgun.pierce, 3);
-  assert.equal(G.WEAPONS.rocket.pierce, 0);
+  assert.equal(G.WEAPONS.pistol.pierce, 1); // 所有枪初始命中数 1 = 不穿透
+  assert.equal(G.WEAPONS.mg.pierce, 1);
+  assert.equal(G.WEAPONS.shotgun.pierce, 1);
+  assert.equal(G.WEAPONS.rocket.pierce, 1);
   assert.equal(G.levelPierceMul(4), 1);
   assert.equal(G.levelPierceMul(5), 2);
   assert.equal(G.levelPierceMul(10), 3);
   assert.equal(G.levelPierceMul(15), 4);
-  assert.equal(G.weaponFire('mg', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1', { pierceMul: 2 })[0].maxHits, 5); // 1+2×2
+  assert.equal(G.weaponFire('mg', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1', { pierceMul: 2 })[0].maxHits, 2); // 1×2 等级穿透
   assert.equal(G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 9000, 0, 'p1')[0].maxHits, 1);               // 手枪基础不穿透
   // 赶路速度分区：近（≤768=视野半宽640×1.2）原速 / 中 ×2 / 远 ×3
   assert.equal(G.monsterSpeedMul(100), 1);
@@ -155,7 +155,7 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
   const bs = G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 1000, 0, 'p1');
   assert.equal(bs.length, 1);
   assert.deepEqual({ dmg: bs[0].dmg, vx: bs[0].vx, vy: bs[0].vy, owner: bs[0].owner, pierce: bs[0].pierce, range: bs[0].range },
-    { dmg: 25, vx: 1500, vy: 0, owner: 'p1', pierce: 0, range: 600 });
+    { dmg: 25, vx: 1500, vy: 0, owner: 'p1', pierce: 1, range: 600 });
   // 冷却未到（200ms < 300ms）→ null
   assert.equal(G.weaponFire('pistol', 0, 0, { x: 1, y: 0 }, 1200, 1000, 'p1'), null);
   // 未知武器 / 非法方向（null、零向量）→ null
@@ -188,7 +188,7 @@ assert.equal(G.circleRectHit(50, 100, 16, { x: 100, y: 0, w: 20, h: 200 }), fals
 {
   // 火箭筒：慢速大弹、不穿透、命中即爆（直击 30 / 爆炸 50 / 半径 100 / 射程 700）
   const cn = G.weaponFire('rocket', 0, 0, { x: -1, y: 0 }, 9000, 0, 'p1');
-  assert.equal(cn[0].pierce, 0);
+  assert.equal(cn[0].pierce, 1);
   assert.equal(cn[0].maxHits, 1);
   assert.equal(cn[0].vx, -1050);
   assert.equal(cn[0].size, 8);

@@ -631,7 +631,7 @@ function statusBar(me) {
   const w = G.WEAPONS[me.weapon];
   if (w) {
     ctx.font = '12px sans-serif'; ctx.fillStyle = '#999';
-    const pn = Math.round((w.pierce || 0) * G.levelPierceMul(me.level));
+    const pn = Math.round((w.pierce || 1) * G.levelPierceMul(me.level)) - 1; // 穿透数 = 命中数-1
     ctx.fillText(`伤害 ${w.dmg}${w.count > 1 ? '×' + w.count : ''} · 射程 ${w.range}${pn ? ` · 穿透 ${pn}` : ''}${w.explode ? ` · 爆炸 ${w.explodeDmg}` : ''}`,
       tx + nameW + 10, y + 25);
   }

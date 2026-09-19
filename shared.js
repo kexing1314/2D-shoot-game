@@ -76,13 +76,13 @@ const ROOM    = { maxPlayers: 4, codeLen: 4 };
 
 // 武器表：加武器 = 加一行；射击逻辑只读这张表。range = 子弹最大飞行距离（px）
 // explode = 爆炸半径（0 不爆），explodeDmg = 爆炸 AOE 伤害：命中任何目标/撞墙/飞到终点都引爆
-// pierce = 基础穿透数（子弹可命中 1 + pierce×等级倍率 个目标后消失；0 = 命中即消失）
+// pierce = 子弹可命中目标数（1 = 不穿透；等级倍率 ×2/×3/×4 直接乘它）
 // mag = 弹匣容量，reloadMs = 换弹时长（打空自动换弹 / R 键手动，期间不能开火）
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, spread: 0,  pierce: 0, size: 3, range: 600, mag: 12, reloadMs: 1500 },
-  mg:      { rate: 100, dmg: 15, speed: 1500, count: 1, spread: 0,  pierce: 2, size: 3, range: 500, mag: 40, reloadMs: 2600 },
-  shotgun: { rate: 600, dmg: 20, speed: 1500, count: 5, spread: 15, pierce: 3, size: 3, range: 400, mag: 5,  reloadMs: 2200 },
-  rocket:  { rate: 1500, dmg: 30, speed: 1050, count: 1, spread: 0, pierce: 0, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
+  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, spread: 0,  pierce: 1, size: 3, range: 600, mag: 12, reloadMs: 1500 },
+  mg:      { rate: 100, dmg: 15, speed: 1500, count: 1, spread: 0,  pierce: 1, size: 3, range: 500, mag: 40, reloadMs: 2600 },
+  shotgun: { rate: 600, dmg: 20, speed: 1500, count: 5, spread: 15, pierce: 1, size: 3, range: 400, mag: 5,  reloadMs: 2200 },
+  rocket:  { rate: 1500, dmg: 30, speed: 1050, count: 1, spread: 0, pierce: 1, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
 };
 
 const COLORS = ['#4a9eff', '#ff9f43', '#2ecc71', '#e84393'];
@@ -190,7 +190,7 @@ function weaponFire(weaponKey, x, y, dir, now, lastFireAt, owner, opts) {
       x, y,
       vx: Math.cos(a) * w.speed * (o.speedMul || 1), vy: Math.sin(a) * w.speed * (o.speedMul || 1),
       dmg: w.dmg * (o.dmgMul || 1), size: w.size, pierce: w.pierce, owner, range: w.range,
-      maxHits: 1 + Math.round((w.pierce || 0) * (o.pierceMul || 1)), // 可命中目标数（穿透）
+      maxHits: Math.max(1, Math.round((w.pierce || 1) * (o.pierceMul || 1))), // 可命中目标数（pierce×等级倍率）
       explode: w.explode || 0, explodeDmg: w.explodeDmg || 0,
     });
   }

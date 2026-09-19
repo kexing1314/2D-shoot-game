@@ -65,23 +65,23 @@ game/
 - **HP 缓慢恢复**：每秒 +2，回满 100 封顶。**受伤打断恢复**：服务器为每个玩家记 `lastDamagedAt`，距最近一次受伤满 **3 秒**后才重新开始恢复。恢复速率与延迟时长在 `shared.js` 可调
 - **低血肾上腺素**：HP 低于 50 时每次受伤获得 3 秒移速 +30%（260 px/s），再受伤刷新时长不叠加；客户端画蓝色残影+脉冲圆环提示（boost 字段广播）
 - 方向键开火，两键同按合成斜向射击（←+→ 等对键互相抵消不开火），射速由武器表决定（默认手枪 300ms/发，按住连发同速率）
-- 子弹属性完全由武器表驱动；碰墙或出图即消失；**穿透**：武器带基础穿透数（手枪 1/机枪 2/霰弹 3/火箭 0），子弹最多命中 `1 + 穿透数×等级档`（5 级 ×2 / 10 级 ×3 / 15 级 ×4）个目标后消失，爆炸弹命中即爆不占穿透
+- 子弹属性完全由武器表驱动；碰墙或出图即消失；**穿透**：全枪初始 pierce=1（不穿透），等级档 ×2/×3/×4 乘出可命中目标数，爆炸弹命中即爆
 - **碰撞体积**：玩家×玩家、玩家×敌人、**怪×怪**互不可穿过，重叠一律各退一半（**双向互挡**：怪朝玩家顶时玩家也挤不开怪，身体封锁是双向的，带撞墙检测；怪×怪推开防怪潮叠成一点）；**网格占位**：44px 空间哈希，同格实体（玩家+怪，Boss 豁免）互推到格宽间距——一格一个、叠堆自动摊开成阵；移动仍连续（软性占位，非网格步进）
 
 ### 4.3 武器表（数据驱动，加武器 = 加一行）
 
 ```js
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, pierce: 0, size: 3, range: 600, mag: 12, reloadMs: 1500 },
-  mg:      { rate: 100, dmg: 15, speed: 1500, count: 1, pierce: 2, size: 3, range: 500, mag: 40, reloadMs: 2600 },
-  shotgun: { rate: 600, dmg: 20, speed: 1500, count: 5, spread: 15, pierce: 3, size: 3, range: 400, mag: 5, reloadMs: 2200 },
-  rocket:  { rate: 1500, dmg: 30, speed: 1050, count: 1, pierce: 0, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
+  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, pierce: 1, size: 3, range: 600, mag: 12, reloadMs: 1500 },
+  mg:      { rate: 100, dmg: 15, speed: 1500, count: 1, pierce: 1, size: 3, range: 500, mag: 40, reloadMs: 2600 },
+  shotgun: { rate: 600, dmg: 20, speed: 1500, count: 5, spread: 15, pierce: 1, size: 3, range: 400, mag: 5, reloadMs: 2200 },
+  rocket:  { rate: 1500, dmg: 30, speed: 1050, count: 1, pierce: 1, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
 }
 ```
 
 - 射击逻辑只写一次：读表生成子弹（count>1 时以射击方向为中心 ±spread 度扇形展开）
 - 子弹**子步进推进**：每 tick 按弹速拆成 ≤12px 的小步逐步做墙/实体判定——1500px/s 弹每 tick 飞 50px 大于命中窗口，不拆步会穿模漏判
-- pierce=true 的子弹穿过怪物和玩家不消失，撞墙才消失
+- pierce = 子弹可命中目标数：**全枪初始 1 = 不穿透**；等级 5/10/15 级 ×2/×3/×4 直接乘（maxHits = pierce × 等级档）
 - range = 子弹最大飞行距离（px），飞满即消失；霰弹枪贴脸爆发
 - **火箭筒爆炸弹**（替代加农炮）：命中任何目标/撞墙/飞到终点都引爆，对半径 100px 内目标造成 50 点 AOE 伤害 + 沿子弹射击方向击退，不伤射手自己；直击目标吃 30 直击伤 + 50 AOE 叠加。单发弹匣 + 3s 换弹 = 大空窗平衡。Boss 持火箭筒时爆炸只伤玩家（与 Boss 子弹只打玩家一致）；boom 随子弹广播爆炸半径数值（0=不爆），客户端据此画橙色冲击波圈——扩散到恰好实际伤害半径后淡出（所见即所伤）+ 爆炸粒子
 - Boss 刷新时从表中随机选一个非 pistol 武器持有
