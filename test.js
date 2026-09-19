@@ -7,6 +7,7 @@ const G = require('./shared.js');
 const near = (px, py, w, d) => px + d > w.x && px - d < w.x + w.w && py + d > w.y && py - d < w.y + w.h;
 
 assert.equal(G.TICK_MS, 33);
+assert.equal(G.PLAYER.speed, 170); // 初始移速下调（满级 ×2 = 340）
 assert.ok(G.COLORS.length >= G.ROOM.maxPlayers, '颜色数须不少于最大玩家数');
 
 assert.ok(Object.keys(G.MAPS).length >= 4, '地图至少 4 张');

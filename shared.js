@@ -10,7 +10,7 @@ const TICK_MS = 33; // 30 tick/s：云端联机降体感延迟（按键等待+�
 // 受击僵持（不能攻击，移动不受影响）：无盾/碎盾 stunMs，被盾挡下 stunShieldedMs；击退同档减半
 // shieldBreakRegenMs = 碎盾后不受击多久才开始回盾（未碎的普通回盾走 regenDelayMs）
 // panic* = 低血肾上腺素：HP 低于 panicBelow 时每次受伤提速 panicMul 倍，持续 panicMs（再受伤刷新时长）
-const PLAYER  = { r: 16, hpMax: 100, speed: 200, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000,
+const PLAYER  = { r: 16, hpMax: 100, speed: 170, respawnMs: 3000, regenPerSec: 2, regenDelayMs: 3000,
   stunMs: 750, stunShieldedMs: 400, knockback: 24, knockbackShielded: 12, shieldBreakRegenMs: 20000,
   panicBelow: 50, panicMul: 1.3, panicMs: 3000 };
 // 怪物公共参数（个体 r/hp/speed/dmg 在 MONSTER_TYPES）

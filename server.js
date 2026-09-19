@@ -244,11 +244,16 @@ function tick(room) {
     }
   }
 
-  // 4c. 碰撞体积：玩家×玩家、玩家×敌人互不可穿过，全部各退一半（双向互挡：怪顶玩家时玩家也顶不进去）
+  // 4c. 碰撞体积：玩家×玩家、玩家×敌人、怪×怪互不可穿过，全部各退一半（双向互挡）
   for (let i = 0; i < alive.length; i++) {
     for (let j = i + 1; j < alive.length; j++) G.separate(alive[i], G.PLAYER.r, alive[j], G.PLAYER.r, room.walls, false);
     for (const m of room.monsters) G.separate(m, m.r, alive[i], G.PLAYER.r, room.walls, false);
     for (const bs2 of room.bosses) G.separate(bs2, G.BOSS.r, alive[i], G.PLAYER.r, room.walls, false);
+  }
+  for (let i = 0; i < room.monsters.length; i++) { // 怪×怪：怪潮不叠成一点
+    for (let j = i + 1; j < room.monsters.length; j++) {
+      G.separate(room.monsters[i], room.monsters[i].r, room.monsters[j], room.monsters[j].r, room.walls, false);
+    }
   }
 
   // 5. 波次怪潮：清完进休息（掉补给）→ 到点下一波（数量/HP/速度随波次+难度缩放）；Boss 仍定时

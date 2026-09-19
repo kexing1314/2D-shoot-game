@@ -202,6 +202,13 @@ function detect(p0, s) {
     burst(q1.x, q1.y, q0.id === myId ? 30 : 22, q1.color, 220, 0.7, 4);
     if (q0.id === myId) { shake = 14; flash = 1; }
   }
+  for (const q0 of p0.monsters) { // 前摇结束=落击：红 slash 爆 + 小红环（攻击时刻可视化）
+    const q1 = s.monsters.find(mm => mm.id === q0.id);
+    if (q0.w && q1 && !q1.w) {
+      burst(q1.x, q1.y, 10, '#ff1744', 220, 0.35, 3);
+      rings.push({ x: q1.x, y: q1.y, r: 34, life: 0.25, max: 0.25, color: '#ff1744', fill: '#ff8a80' });
+    }
+  }
   for (const q0 of p0.players) { // 碎盾：蓝粒子爆 + 蓝色冲击波环
     const q1 = s.players.find(p => p.id === q0.id);
     if (q1 && q0.respawnIn === 0 && q0.shield > 0 && q1.shield <= 0) {
@@ -375,10 +382,16 @@ function render() {
       ctx.beginPath(); ctx.arc(m.x, m.y, MR + 6, 0, Math.PI * 2); ctx.stroke();
       ctx.globalAlpha = 1;
     }
-    if (m0.w) { // 攻击前摇：红闪脉动预警圈
-      ctx.globalAlpha = 0.45 + 0.3 * Math.sin(t / 50);
+    if (m0.w) { // 攻击前摇：红闪脉动预警圈 + 朝向扇形（指向即将落击的方向）
+      const pulse = 0.45 + 0.3 * Math.sin(t / 50);
+      ctx.globalAlpha = pulse;
       ctx.strokeStyle = '#ff1744'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(m.x, m.y, MR + 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,23,68,0.4)';
+      ctx.beginPath();
+      ctx.moveTo(m.x, m.y);
+      ctx.arc(m.x, m.y, MR + 26, ang - 0.7, ang + 0.7);
+      ctx.closePath(); ctx.fill();
       ctx.globalAlpha = 1;
     }
     const img = m0.t === 'brute' ? SPR.mon_brute : m0.t === 'spitter' ? SPR.mon_spitter : SPR.mon_stand;
