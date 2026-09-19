@@ -72,7 +72,7 @@ game/
 
 ```js
 const WEAPONS = {
-  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, pierce: 1, size: 3, range: 600, mag: 12, reloadMs: 1500 },
+  pistol:  { rate: 300, dmg: 25, speed: 1500, count: 1, pierce: 0, size: 3, range: 600, mag: 12, reloadMs: 1500 },
   mg:      { rate: 100, dmg: 15, speed: 1500, count: 1, pierce: 2, size: 3, range: 500, mag: 40, reloadMs: 2600 },
   shotgun: { rate: 600, dmg: 20, speed: 1500, count: 5, spread: 15, pierce: 3, size: 3, range: 400, mag: 5, reloadMs: 2200 },
   rocket:  { rate: 1500, dmg: 30, speed: 1050, count: 1, pierce: 0, size: 8, range: 700, explode: 100, explodeDmg: 50, mag: 1, reloadMs: 3000 },
@@ -93,7 +93,7 @@ const WEAPONS = {
 - **怪物类型**（MONSTER_TYPES）：normal 僵尸 / runner 疾行（0.7 体型、130 速、30 血，2 波起 20%）/ brute 重装（机器人壳 1.4 体型、250 血、25 碰伤，3 波起 10%）/ spitter 喷吐（远程慢速红弹 500 射程 2.5s 一发，4 波起 10%；怪物弹只打玩家）
 - **精英怪**：5% 混入——血 ×4、体 ×1.25、伤 ×1.5、金环脉动标识，死亡必掉补给包
 - **赶路速度分区**：与目标距离 > 1920px 速度 ×3、768–1920 ×2、≤768（=视野半宽 640×1.2，接战距离）恢复原速——怪潮跨图赶路不拖沓、贴脸压力不变
-- **近战前摇**：怪进入接触范围先进前摇（客户端红闪脉动预警圈，state.monsters.w 标记），前摇结束仍在接触才结算伤害、否则落空，之后 1s 冷却；前摇时长 `max(50, 550-(N-1)×50)` ms——第 1 波 0.55s 可躲、第 11 波起 50ms 贴到必中；前摇期间怪继续追；普通怪碰伤 14
+- **近战前摇**：怪进入接触范围先进前摇（客户端红闪脉动预警圈，state.monsters.w 标记），前摇结束仍在接触才结算伤害、否则落空，之后 1s 冷却；前摇时长 `max(50, 550-(N-1)×50)` ms——第 1 波 0.55s 可躲、第 11 波起 50ms 贴到必中；前摇期间怪继续追；普通怪碰伤 14；攻击距离 = 双方半径和 + `MONSTER.reach`（16px 额外伸手）
 - 行为：**A\* 网格寻路**（60px 格，每怪限流 0.5s 重算+id 错峰）追最近的玩家（60 px/s）——不可破坏墙绕路、可破坏墙挡路站定啃穿（`MONSTER.wallDmgPerSec=30`）；无路径才直线；碰撞造成 10 伤害，之后 1 秒攻击冷却
 - HP 50（默认手枪两发），死亡即消失
 
