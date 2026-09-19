@@ -255,6 +255,21 @@ function tick(room) {
       G.separate(room.monsters[i], room.monsters[i].r, room.monsters[j], room.monsters[j].r, room.walls, false);
     }
   }
+  // 4d. 网格占位：空间哈希同格实体互推到 GRID_CELL 间距（一格一个，叠堆摊开成阵）；Boss 体型超标豁免
+  const occ = new Map();
+  const units = [...alive, ...room.monsters];
+  for (const u of units) {
+    const key = ((u.x / G.GRID_CELL) | 0) * 10000 + ((u.y / G.GRID_CELL) | 0);
+    const list = occ.get(key);
+    if (list) list.push(u); else occ.set(key, [u]);
+  }
+  for (const list of occ.values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        G.separate(list[i], G.GRID_CELL / 2, list[j], G.GRID_CELL / 2, room.walls, false);
+      }
+    }
+  }
 
   // 5. 波次怪潮：清完进休息（掉补给）→ 到点下一波（数量/HP/速度随波次+难度缩放）；Boss 仍定时
   if (room.players.size > 0) {

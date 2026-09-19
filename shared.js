@@ -40,6 +40,7 @@ function pickMonsterType(wave, r0) {
 // 精英怪：5% 混入，血×4 体×1.25 伤×1.5，死亡必掉补给
 const ELITE = { chance: 0.05, hpMul: 4, dmgMul: 1.5, scaleMul: 1.25 };
 const PATH_CELL = 60;  // A* 网格边长（px）
+const GRID_CELL = 44;  // 占位网格：一格一个实体（同格互推到此间距），怪潮摊开不叠堆
 
 // 波次怪潮：数量/HP/经验全走函数，diff = 难度乘数（将来菜单选项传不同 diff，room 存一个数字）
 const WAVE = { baseCount: 14, perWave: 8, maxCount: 100, hpPerWave: 0.18,
@@ -330,7 +331,7 @@ function pickBossSpawn(spawns, bosses, players) {
 return { MAPS, DEFAULT_MAP, TICK_MS, PLAYER, MONSTER, BOSS, ROOM, WEAPONS, COLORS, PATH_CELL,
   WAVE, waveCount, waveHpMul, waveSpeedMul, waveXp, waveBossXp, waveWindupMs,
   MONSTER_TYPES, pickMonsterType, ELITE, spawnSides,
-  LEVELS, levelMul, shieldMax, xpNeed, levelPierceMul, monsterSpeedMul,
+  LEVELS, levelMul, shieldMax, xpNeed, levelPierceMul, monsterSpeedMul, GRID_CELL,
   dist, circleRectHit, moveWithWalls, fireDir, weaponFire, bulletStep,
   chaseStep, regenStep, findPath, separate, pickFarthestSpawn, pickBossSpawn };
 });
