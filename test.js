@@ -94,6 +94,10 @@ assert.deepEqual(Object.entries(G.WEAPONS).map(([, w]) => [w.mag, w.reloadMs]),
   assert.equal(G.pickMonsterType(5, 0.35), 'spitter');
   assert.equal(G.pickMonsterType(5, 0.9), 'normal');
   assert.equal(G.ELITE.chance, 0.05);
+  // 友伤减半 + 玩家对怪/Boss 击退减半
+  assert.equal(G.FRIENDLY_MUL, 0.5);
+  assert.equal(G.MONSTER.knockback, 10);
+  assert.equal(G.BOSS.knockback, 5);
   // 刷怪边：前 3 波左右两侧，第 4 波起四周
   assert.deepEqual(G.spawnSides(1), [2, 3]);
   assert.deepEqual(G.spawnSides(3), [2, 3]);

@@ -130,15 +130,15 @@ function tick(room) {
         return false;
       }
       let dead = false;
-      // 命中玩家：仅 Boss/怪物远程弹打玩家（合作模式：玩家子弹穿过队友）；穿透至 maxHits 个目标后消失
-      if (b.boss || b.mon) for (const p of room.players.values()) {
+      // 命中玩家：玩家子弹打队友 = 友伤减半（FRIENDLY_MUL）；穿透至 maxHits 个目标后消失
+      for (const p of room.players.values()) {
         if (p.id === b.owner || p.deadUntil) continue;
         if (G.dist(b.x, b.y, p.x, p.y) >= G.PLAYER.r + b.size) continue;
         b.hitIds = b.hitIds || [];
         if (b.hitIds.includes(p.id)) continue;
         b.hitIds.push(p.id);
         const bl = Math.hypot(b.vx, b.vy) || 1;
-        damagePlayer(room, p, b.dmg, b.owner, now, b, { x: b.vx / bl, y: b.vy / bl }); // 击退沿弹速向量
+        damagePlayer(room, p, b.owner ? b.dmg * G.FRIENDLY_MUL : b.dmg, b.owner, now, b, { x: b.vx / bl, y: b.vy / bl }); // 击退沿弹速向量
         if (b.explode) { boom(room, b, now); return false; } // 爆炸弹命中即爆（直击伤 + AOE 叠加）
         if (b.hitIds.length >= (b.maxHits || 1)) { dead = true; break; }
       }
@@ -247,8 +247,9 @@ function tick(room) {
   // 4c. 碰撞体积：玩家×玩家、玩家×敌人、怪×怪互不可穿过，全部各退一半（双向互挡）
   for (let i = 0; i < alive.length; i++) {
     for (let j = i + 1; j < alive.length; j++) G.separate(alive[i], G.PLAYER.r, alive[j], G.PLAYER.r, room.walls, false);
-    for (const m of room.monsters) G.separate(m, m.r, alive[i], G.PLAYER.r, room.walls, false);
-    for (const bs2 of room.bosses) G.separate(bs2, G.BOSS.r, alive[i], G.PLAYER.r, room.walls, false);
+    // 怪/Boss 不被玩家身体推动（怪群保持阵型压迫），只推玩家让路
+    for (const m of room.monsters) G.separate(alive[i], G.PLAYER.r, m, m.r, room.walls, true);
+    for (const bs2 of room.bosses) G.separate(alive[i], G.PLAYER.r, bs2, G.BOSS.r, room.walls, true);
   }
   for (let i = 0; i < room.monsters.length; i++) { // 怪×怪：怪潮不叠成一点
     for (let j = i + 1; j < room.monsters.length; j++) {
@@ -400,13 +401,14 @@ function damageMonster(room, list, i, dmg, isBoss, killerId) {
 
 // 爆炸弹引爆：AOE 伤玩家（不伤射手/死人，沿爆心→玩家击退）；Boss 弹只炸玩家，不炸怪/其他 Boss
 function boom(room, b, now) {
-  // 合作模式：玩家火箭不伤队友，仅 Boss 爆炸打玩家；击退统一沿子弹射击方向
+  // 爆炸伤玩家：玩家 Own 的爆炸友伤减半；击退统一沿子弹射击方向
   const bl = Math.hypot(b.vx, b.vy) || 1;
   const kd = { x: b.vx / bl, y: b.vy / bl };
-  if (b.boss) for (const p of room.players.values()) {
+  const mul = b.owner ? G.FRIENDLY_MUL : 1;
+  for (const p of room.players.values()) {
     if (p.id === b.owner || p.deadUntil) continue;
     if (G.dist(b.x, b.y, p.x, p.y) > b.explode + G.PLAYER.r) continue;
-    damagePlayer(room, p, b.explodeDmg, b.owner, now, b, kd);
+    damagePlayer(room, p, b.explodeDmg * mul, b.owner, now, b, kd);
   }
   if (b.boss) return;
   for (const [list, isBoss] of [[room.monsters, false], [room.bosses, true]]) {

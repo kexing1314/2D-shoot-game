@@ -179,10 +179,13 @@ function detect(p0, s) {
   const gone = (a, b) => a.filter(x => !b.some(y => y.id === x.id));
   const born = (a, b) => b.filter(x => !a.some(y => y.id === x.id));
   for (const b of born(p0.bullets, s.bullets)) {                                             // 枪口闪光 + 射手后坐
-    burst(b.x, b.y, 3, '#fff8c4', 60, 0.12, 2);
-    if (b.boss || b.mon) continue; // 怪物远程弹不推射手后坐
-    const shooter = s.players.find(p => p.respawnIn === 0 && Math.hypot(p.x - b.x, p.y - b.y) < G.PLAYER.r + 14);
-    if (shooter) recoil.set(shooter.id, performance.now() + 100);
+    if (b.boss || b.mon) { burst(b.x, b.y, 3, '#fff8c4', 60, 0.12, 2); continue; } // 怪物远程弹不推射手后坐
+    // 高速弹首帧已飞出 ~50px：射手就近判定放宽到 70px + 闪光贴枪口（弹向 20% 处），不再闪在空处
+    const shooter = s.players.find(p => p.respawnIn === 0 && Math.hypot(p.x - b.x, p.y - b.y) < 70);
+    if (shooter) {
+      burst(shooter.x + (b.x - shooter.x) * 0.2, shooter.y + (b.y - shooter.y) * 0.2, 3, '#fff8c4', 60, 0.12, 2);
+      recoil.set(shooter.id, performance.now() + 100);
+    } else burst(b.x, b.y, 3, '#fff8c4', 60, 0.12, 2);
   }
   for (const b of gone(p0.bullets, s.bullets)) {
     if (b.boom) { // 火箭爆炸：冲击波圈扩散到真实伤害半径（b.boom = 半径）+ 外橙内黄双层粒子
